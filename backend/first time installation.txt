@@ -1,0 +1,25 @@
+python3.11 -m venv venv  # IMPORTNANT TO USE PYTHON 3.11, 3.13 WILL BREAK CODE. 
+.\venv\Scripts\activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+
+================================================================
+PYTORCH WITH CUDA INSTALLATION INSTRUCTIONS
+================================================================
+
+After installing requirements.txt, run this command separately:
+
+Windows (CUDA 12.x):
+--------------------
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+Linux/Mac (CUDA 12.x):
+----------------------
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+Verify installation:
+--------------------
+python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
+
+================================================================

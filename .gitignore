@@ -1,0 +1,105 @@
+# ============================================
+# Python Backend
+# ============================================
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+**/venv/
+**/.venv/
+
+# Python compiled files
+__pycache__/
+*.pyc
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# ============================================
+# Node.js Frontend
+# ============================================
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+
+# ============================================
+# Environment & Config
+# ============================================
+.env
+.env.local
+.env.*.local
+*.local
+
+# ============================================
+# CRITICAL: Large Files & Model Cache
+# ============================================
+# Block ENTIRE models directory (484MB+)
+backend/models/
+!backend/models/.gitkeep
+
+# Block ENTIRE storage directory
+backend/storage/
+!backend/storage/.gitkeep
+!backend/storage/uploads/.gitkeep
+!backend/storage/processed/.gitkeep
+!backend/storage/transcripts/.gitkeep
+
+# Block logs directory
+backend/logs/
+!backend/logs/.gitkeep
+
+# LibreTranslate data
+lt-data/
+
+# Any model files anywhere
+*.pt
+*.bin
+*.pth
+*.onnx
+*.safetensors
+
+# ============================================
+# Media Files (Test files)
+# ============================================
+*.mkv
+*.webm
+*.flac
+*.m4a
+*.mp4
+*.avi
+*.mov
+*.mp3
+*.wav
+
+# ============================================
+# IDE & Editor
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================
+# Operating System
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ============================================
+# Logs
+# ============================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
