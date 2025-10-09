@@ -15,15 +15,16 @@ export default defineConfig({
     react({
       // Fast Refresh for instant HMR
       fastRefresh: true,
-      // Babel optimizations
-      babel: {
-        plugins: [
-          // Remove console.log in production
-          process.env.NODE_ENV === 'production' ? ['transform-remove-console'] : null,
-        ].filter(Boolean),
-      },
+      // REMOVED: Babel console removal (redundant - esbuild handles it)
     }),
   ],
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ESBUILD - Minification and optimization (ROOT LEVEL)
+  // ═══════════════════════════════════════════════════════════════════════════
+  esbuild: {
+    drop: ['console', 'debugger'],  // Remove console.log and debugger in production
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PATH RESOLUTION
@@ -85,15 +86,8 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: true,      // Generate sourcemaps for debugging
     
-    // Minification
-    minify: 'terser',     // Use terser for better compression
-    terserOptions: {
-      compress: {
-        drop_console: true,     // Remove console.log in production
-        drop_debugger: true,    // Remove debugger statements
-        pure_funcs: ['console.log', 'console.debug'],
-      },
-    },
+    // Use esbuild minifier (built-in, no extra dependency needed)
+    minify: 'esbuild',
 
     // Code splitting strategy
     rollupOptions: {
@@ -107,10 +101,10 @@ export default defineConfig({
           'animation': ['framer-motion'],
           
           // RxJS and state management
-          'state': ['rxjs', '@automerge/automerge'],
+          'state': ['rxjs', '@automerge/automerge', 'zustand'],
           
-          // Large UI libraries
-          'ui-vendor': ['lucide-react'],
+          // Socket and messaging
+          'socket': ['socket.io-client', '@msgpack/msgpack'],
         },
         
         // Naming strategy for chunks
@@ -152,7 +146,8 @@ export default defineConfig({
       'react-router-dom',
       'framer-motion',
       'rxjs',
-      'lucide-react',
+      'zustand',
+      'socket.io-client',
     ],
 
     // Use esbuild for fast dependency pre-bundling
@@ -169,7 +164,7 @@ export default defineConfig({
   // ═══════════════════════════════════════════════════════════════════════════
   worker: {
     format: 'es',         // Use ES modules in workers
-    plugins: [wasm()],    // Enable WASM in workers
+    plugins: () => [wasm()],  // FIXED: plugins is now a function
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

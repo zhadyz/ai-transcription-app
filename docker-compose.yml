@@ -1,12 +1,74 @@
+version: '3.8'
+
 services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: transcription-backend
+    restart: unless-stopped
+    
+    # Expose on HOST network (not just container network)
+    ports:
+      - "8000:8000"   # HTTP - matches local
+      - "8443:8443"   # HTTPS - for streaming
+    
+    volumes:
+      - ./backend/storage:/app/storage
+      - ./backend/logs:/app/logs
+      # SSL certs for HTTPS streaming
+      - ./backend/localhost+2.pem:/app/localhost+2.pem:ro
+      - ./backend/localhost+2-key.pem:/app/localhost+2-key.pem:ro
+    
+    environment:
+      - ENV=production
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - WHISPER_DEVICE=cuda
+      - MAX_FILE_SIZE_MB=5000
+      - LIBRETRANSLATE_URL=http://libretranslate:5000
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    depends_on:
+      - libretranslate
+    
+    networks:
+      - transcription-net
+
   libretranslate:
     image: libretranslate/libretranslate:latest
-    container_name: libretranslate
+    container_name: transcription-translate
     restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
-      - LT_LOAD_ONLY=en,es,fr,de,zh,ar,pt,ru,ja,it,nl,ko
+      - LT_LOAD_ONLY=en,es,fr,de,it,pt,ru,ja,ko,zh,ar,hi
       - LT_THREADS=4
     volumes:
       - ./lt-data:/home/libretranslate/.local
+    networks:
+      - transcription-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: transcription-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - transcription-net
+
+networks:
+  transcription-net:
+    driver: bridge
