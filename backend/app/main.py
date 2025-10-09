@@ -29,6 +29,8 @@ from app.api.routes import capabilities, stream_upload
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
+from app.api.routes.device_broadcaster import broadcast_device_stats_periodically
+from app.api.routes.system import get_gpu_oracle
 
 # Initialize logging system
 setup_logging(log_level=settings.LOG_LEVEL, log_dir="./logs")
@@ -80,6 +82,12 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
     logger.info("Background cleanup task started")
     
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # ═══════════════════════════════════════════════════════════════════════
+    device_stats_task = asyncio.create_task(broadcast_device_stats_periodically())
+    logger.info("🎯 Device telemetry broadcaster started")
+    
     yield
     
     # Shutdown
@@ -89,6 +97,16 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # ═══════════════════════════════════════════════════════════════════════
+    device_stats_task.cancel()
+    try:
+        await device_stats_task
+    except asyncio.CancelledError:
+        pass
+    get_gpu_oracle().shutdown()
     
     # Unload models to free memory
     logger.info("Unloading Whisper models...")

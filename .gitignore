@@ -103,3 +103,14 @@ Desktop.ini
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+
+
+*.bak
+*.tmp
+*.temp
+.DS_Store
+desktop.ini
+test_*.mp3
+test_*.wav
+sample_*.mkv

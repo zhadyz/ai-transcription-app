@@ -588,7 +588,10 @@ async def start_transcription(
     quality_map = {
         "base": TranscriptionQuality.FAST,
         "small": TranscriptionQuality.BALANCED,
-        "medium": TranscriptionQuality.DEEP
+        "medium": TranscriptionQuality.DEEP,
+        "large-v2": TranscriptionQuality.ULTRA,
+        "large-v3": TranscriptionQuality.MAXIMUM
+
     }
     
     format_map = {
@@ -683,7 +686,9 @@ async def transcribe_from_path(
     quality_map = {
         "base": TranscriptionQuality.FAST,
         "small": TranscriptionQuality.BALANCED,
-        "medium": TranscriptionQuality.DEEP
+        "medium": TranscriptionQuality.DEEP,
+        "large-v2": TranscriptionQuality.ULTRA,
+        "large-v3": TranscriptionQuality.MAXIMUM
     }
     
     format_map = {

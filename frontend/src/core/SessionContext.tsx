@@ -262,25 +262,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     sessionRef.current = session
 
     // Generate QR URL
-    const getNetworkHostname = () => {
-      const currentHost = window.location.hostname
-      
-      if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-        return currentHost
-      }
-      
-      const backendHost = backendUrl.replace(/^https?:\/\//, '').split(':')[0]
-      if (backendHost !== 'localhost' && backendHost !== '127.0.0.1') {
-        return backendHost
-      }
-      
-      return currentHost
-    }
-
-    const hostname = getNetworkHostname()
-    const port = window.location.port || '5173'
-    const protocol = window.location.protocol
-    const qrUrl = `${protocol}//${hostname}:${port}/mobile-upload?session=${sessionId}`
+    const qrUrl = `${window.location.origin}/mobile-upload?session=${sessionId}`
 
     console.log('🌐 [Desktop] QR URL:', qrUrl)
 

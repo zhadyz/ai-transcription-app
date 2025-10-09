@@ -17,12 +17,12 @@ python-dotenv==1.0.1
 aiofiles==24.1.0
 
 # PyTorch with CUDA 12.4 (Windows)
---index-url https://download.pytorch.org/whl/cu124
-torch==2.5.1+cu124
-torchaudio==2.5.1+cu124
+# IMPORTANT: Use --extra-index-url (additive) NOT --index-url (replacement)
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
 
-# Whisper
---index-url https://pypi.org/simple
+# Whisper (from PyPI - primary index)
 faster-whisper==1.0.3
 
 # Audio processing
@@ -49,3 +49,4 @@ redis==5.2.0
 
 # Monitoring
 psutil==6.1.0
+nvidia-ml-py3==7.352.0

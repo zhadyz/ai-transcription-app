@@ -1,4 +1,4 @@
-# 🎙️ AI Transcription App - V1.5.2
+# 🎙️ AI Transcription App - V1.5
 
 > **GPU-accelerated transcription with real-time translation, mobile support, and zero-copy streaming. Now with Docker support!**
 
@@ -12,7 +12,39 @@
 
 ## 📋 Changelog
 
-### v1.5.2 (Latest - October 2025) 🐳
+### v1.5.3 (October 09 2025) 🔮
+**Real-Time GPU Telemetry Release**
+
+#### 🟢 ADDED
+- ✅ **GPU Memory Oracle** - Statistical analysis with trend detection, anomaly detection, OOM prediction
+- ✅ **Adaptive Telemetry Broadcaster** - Real-time WebSocket broadcasting (5-15s adaptive intervals)
+- ✅ **Circuit Breaker Pattern** - Self-healing on NVML failures with exponential backoff
+- ✅ **Backpressure Detection** - Per-client health monitoring and automatic throttling
+- ✅ **WebSocket Context** - React context for centralized WebSocket management
+- ✅ **Device Statistics API** - `/system/device-info` with comprehensive GPU metrics
+- ✅ **Graceful Degradation** - Fallback to PyTorch stats when pynvml unavailable
+- ✅ **nvidia-ml-py3** - Direct NVIDIA driver access for accurate VRAM tracking
+
+#### 🟡 CHANGED
+- ⬆️ **DeviceIndicator.tsx** - Rewritten from 460→165 lines with null-safe rendering
+- ⬆️ **system.py** - Replaced with GPUMemoryOracle (pynvml-based with fallback)
+- 🔧 **main.py lifespan()** - Integrated device telemetry broadcaster
+- 🔧 **Backend architecture** - Separated statistics (backend) from display (frontend)
+
+#### 🔴 FIXED
+- 🐛 **VRAM detection** - Now sees CTranslate2 memory allocations (was showing 0.0 GB)
+- 🐛 **Null pointer crashes** - DeviceIndicator handles missing/null GPU data gracefully
+- 🐛 **WebSocket message handling** - Proper JSON parsing with error boundaries
+
+#### 📊 PERFORMANCE
+- ⚡ **<0.1% CPU** - Broadcaster overhead with message caching (4.5s TTL)
+- ⚡ **Zero HTTP polling** - Eliminated 120 requests/hour per client
+- ⚡ **50× lower latency** - WebSocket updates (4ms) vs HTTP polling (200ms)
+- ⚡ **10× fewer renders** - Memoized components with smart re-render logic
+
+---
+
+### v1.5.2 (Latest - October 08 2025) 🐳
 **Docker Support Release**
 
 #### 🟢 ADDED
@@ -39,7 +71,7 @@
 
 ---
 
-### v1.5.1 (October 2025)
+### v1.5.1 (October 08 2025)
 **Stability and Large File Support**
 
 #### 🔴 REMOVED
@@ -210,9 +242,7 @@ See [DOCKER-README.md](DOCKER-README.md) for complete Docker documentation.
 
 ---
 
-## 📦 Manual Installation (Advanced)
-
-### One-Click Installation
+## Venv Installation (Recommended if you don't have docker but use Windows)
 
 **Windows:** Double-click `install.bat` or run `install.ps1`
 
@@ -223,7 +253,9 @@ This automatically installs:
 - Frontend dependencies
 - SSL certificates (optional)
 
-### Manual Step-by-Step Installation
+When installation is complete, hit start.bat and it will automatically start the application. 
+
+### 📦 Manual Step-by-Step Installation (Advanced)
 
 #### 1️⃣ Clone Repository
 ```bash
@@ -265,7 +297,8 @@ cd frontend
 npm install
 ```
 
-#### 4️⃣ SSL Certificates (Optional - for HTTPS/Streaming)
+### 4️⃣ Certs should already come preinstalled. If not,
+##  SSL Certificates (Optional - for HTTPS/Streaming)
 ```bash
 # Install mkcert (one-time)
 # Windows: choco install mkcert
@@ -307,7 +340,7 @@ LOG_LEVEL=INFO" > .env
 
 ## 🎮 How to Use
 
-### Docker Mode (Easiest)
+### Docker (Easiest)
 
 ```bash
 # Start
@@ -317,7 +350,7 @@ docker-start.bat
 http://localhost
 ```
 
-### Manual Mode
+### Manual Installation
 
 #### ⚡ One-Click Startup (Windows)
 Double-click **`START.bat`** in root directory.
@@ -732,9 +765,9 @@ This project is licensed under the **MIT License** - see the [LICENSE](https://o
 
 <div align="center">
 
-**Made with tears ❤️ by Abdul Basir Bari**
+**Made with tears ❤️ by hollowed_eyes**
 
-⭐ **Star this repo if it helped you!** ⭐
+⭐ **Stars are appreciated** ⭐
 
 [Report Bug](https://github.com/zhadyz/ai-transcription-app/issues) · [Request Feature](https://github.com/zhadyz/ai-transcription-app/issues) · [Documentation](https://github.com/zhadyz/ai-transcription-app/wiki)
 

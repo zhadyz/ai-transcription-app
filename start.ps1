@@ -93,7 +93,7 @@ if (-not (Test-Path "backend\venv")) {
     Write-Host "  cd backend" -ForegroundColor White
     Write-Host "  python -m venv venv" -ForegroundColor White
     Write-Host "  venv\Scripts\Activate.ps1" -ForegroundColor White
-    Write-Host "  pip install -r requirements.txt" -ForegroundColor White
+    Write-Host "  pip install -r requirements-local.txt" -ForegroundColor White
     Write-Host ""
     Read-Host "Press Enter to exit"
     exit 1

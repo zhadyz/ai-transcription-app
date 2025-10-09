@@ -40,6 +40,35 @@ function Test-Command {
     }
 }
 
+function Stop-AppProcesses {
+    Write-Info "Stopping any running app processes..."
+    
+    # Stop Python processes
+    $pythonProcs = Get-Process python* -ErrorAction SilentlyContinue
+    if ($pythonProcs) {
+        $pythonProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Info "Stopped Python processes"
+    }
+    
+    # Stop Hypercorn
+    $hypercornProcs = Get-Process hypercorn* -ErrorAction SilentlyContinue
+    if ($hypercornProcs) {
+        $hypercornProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Info "Stopped Hypercorn processes"
+    }
+    
+    # Stop Node
+    $nodeProcs = Get-Process node* -ErrorAction SilentlyContinue
+    if ($nodeProcs) {
+        $nodeProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Info "Stopped Node processes"
+    }
+    
+    # Wait for cleanup
+    Start-Sleep -Seconds 2
+    Write-Success "All app processes stopped"
+}
+
 function Get-Python311Path {
     # Check for Python 3.11 in common locations
     $possiblePaths = @(
@@ -72,7 +101,7 @@ Write-Header "AI TRANSCRIPTION APP - UNIVERSAL INSTALLER"
 Write-Host "This will install EVERYTHING automatically:" -ForegroundColor White
 Write-Host "  - Python 3.11.x virtual environment (REQUIRED VERSION)" -ForegroundColor Gray
 Write-Host "  - PyTorch with CUDA GPU support" -ForegroundColor Gray
-Write-Host "  - All backend dependencies" -ForegroundColor Gray
+Write-Host "  - All backend dependencies (Windows version)" -ForegroundColor Gray
 Write-Host "  - LibreTranslate (12+ languages)" -ForegroundColor Gray
 Write-Host "  - Frontend dependencies (Node.js)" -ForegroundColor Gray
 Write-Host "  - SSL certificates for HTTPS" -ForegroundColor Gray
@@ -127,6 +156,7 @@ if (Test-Command python) {
                 if ($versionOutput -match "Python (\d+)\.(\d+)\.(\d+)") {
                     $pythonMajor = [int]$matches[1]
                     $pythonMinor = [int]$matches[2]
+                    $pythonPatch = [int]$matches[3]
                     $pythonVersion = "$($matches[1]).$($matches[2]).$($matches[3])"
                     Write-Success "Using Python $pythonVersion"
                 }
@@ -208,22 +238,39 @@ if (Test-Path "venv") {
     Write-Warning "Virtual environment already exists"
     $recreate = Read-Host "Recreate it? (y/N)"
     if ($recreate -eq "y" -or $recreate -eq "Y") {
-        Write-Info "Removing old venv..."
-        Remove-Item -Recurse -Force venv
-    } else {
-        Write-Info "Skipping venv creation"
-        & .\venv\Scripts\Activate.ps1
+        Write-Info "Stopping all running processes first..."
         Set-Location ..
-        Write-Success "Using existing virtual environment"
+        Stop-AppProcesses
+        Set-Location backend
         
-        # Skip to frontend install
+        Write-Info "Removing old venv..."
+        try {
+            Remove-Item -Recurse -Force venv -ErrorAction Stop
+            Write-Success "Old venv removed"
+        } catch {
+            Write-Error "Failed to remove venv: $_"
+            Write-Host ""
+            Write-Host "Please manually:" -ForegroundColor Yellow
+            Write-Host "1. Close ALL PowerShell windows" -ForegroundColor White
+            Write-Host "2. Open Task Manager and end any python.exe processes" -ForegroundColor White
+            Write-Host "3. Delete backend\venv folder manually" -ForegroundColor White
+            Write-Host "4. Run install.ps1 again" -ForegroundColor White
+            Write-Host ""
+            Read-Host "Press Enter to exit"
+            exit 1
+        }
+    } else {
+        Write-Info "Using existing virtual environment"
+        & .\venv\Scripts\Activate.ps1
+        
         Write-Host ""
         $skipBackend = Read-Host "Skip backend installation (use existing)? (Y/n)"
         if ($skipBackend -eq "" -or $skipBackend -eq "y" -or $skipBackend -eq "Y") {
+            Set-Location ..\frontend
             Write-Info "Skipping to frontend installation..."
-            # Jump to Step 8
-            goto :SkipToFrontend
+            goto SkipToFrontend
         }
+        Set-Location ..
     }
 }
 
@@ -255,11 +302,6 @@ Write-Info "Upgrading pip..."
 python -m pip install --upgrade pip --quiet
 
 Write-Success "Virtual environment ready"
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CONTINUE WITH REST OF INSTALLATION...
-# (Keep Steps 3-8 exactly as before)
-# ═══════════════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 3: INSTALL PYTORCH WITH CUDA
@@ -304,23 +346,34 @@ $cudaTest = python -c "import torch; print('CUDA Available:', torch.cuda.is_avai
 
 Write-Host $cudaTest -ForegroundColor Gray
 
+if ($cudaTest -like "*CUDA Available: True*") {
+    Write-Success "GPU acceleration is working!"
+} else {
+    Write-Warning "GPU not detected - will use CPU (slower)"
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
-# STEP 4: INSTALL BACKEND DEPENDENCIES
+# STEP 4: INSTALL BACKEND DEPENDENCIES (WINDOWS VERSION!)
 # ═══════════════════════════════════════════════════════════════════════════
 
 Write-Header "STEP 4/8: Installing Backend Dependencies"
 
-Write-Info "Installing all Python packages from requirements.txt..."
+Write-Info "Installing Windows-specific packages from requirements-local.txt..."
 Write-Info "This may take 3-5 minutes..."
 
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-local.txt
 
 if (-not $?) {
     Write-Error "Failed to install dependencies"
+    Write-Host ""
+    Write-Host "If you see errors about missing packages:" -ForegroundColor Yellow
+    Write-Host "1. Make sure you're using Python 3.11" -ForegroundColor White
+    Write-Host "2. Try running: pip install --upgrade pip" -ForegroundColor White
+    Write-Host "3. Try running the install command again" -ForegroundColor White
     exit 1
 }
 
-Write-Success "All backend dependencies installed"
+Write-Success "All backend dependencies installed (Windows version)"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 5: INSTALL FFMPEG
@@ -482,9 +535,12 @@ if ($libretranslateInVenv) {
         Write-Host "App will work without translation service" -ForegroundColor Gray
     }
 }
+
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 8: INSTALL FRONTEND DEPENDENCIES
 # ═══════════════════════════════════════════════════════════════════════════
+
+:SkipToFrontend
 
 Write-Header "STEP 8/8: Installing Frontend Dependencies"
 
@@ -536,7 +592,7 @@ Write-Host ""
 Write-Host "INSTALLED COMPONENTS:" -ForegroundColor Cyan
 Write-Host "  [OK] Python $pythonVersion virtual environment" -ForegroundColor Green
 Write-Host "  [OK] PyTorch with GPU support" -ForegroundColor Green
-Write-Host "  [OK] All backend dependencies" -ForegroundColor Green
+Write-Host "  [OK] All backend dependencies (Windows version)" -ForegroundColor Green
 Write-Host "  [OK] Frontend dependencies (Node.js)" -ForegroundColor Green
 
 if (Test-Command ffmpeg) {
