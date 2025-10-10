@@ -634,9 +634,9 @@ app.add_middleware(
 
 ```
 transcription-platform/
-├── x.py                            # Unified deployment and service management system
-├── AI-Transcription-Installer.exe  # Compiled Windows executable
-├── OnyxLab.ico                     # Application branding asset
+
+├── OnyxTranscription.exe  # Compiled Windows executable
+├       
 │
 ├── scripts/
 │   ├── installer.log               # Deployment and runtime logs
