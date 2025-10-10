@@ -2,7 +2,7 @@
 
 ## Overview
 
-"Experimental transcription app exploring distributed systems, CRDTs, and performance optimization. Over-engineered intentionally to practice advanced patterns."
+Experimental transcription app exploring distributed systems, CRDTs, and performance optimization. Over-engineered intentionally to practice advanced patterns.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com/)
