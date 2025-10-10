@@ -8,6 +8,8 @@ ENV/
 .venv/
 **/venv/
 **/.venv/
+backend/.pip_cache/
+.exe
 
 # Python compiled files
 __pycache__/

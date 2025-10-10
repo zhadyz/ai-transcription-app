@@ -1,0 +1,27 @@
+{
+  "stage": "complete",
+  "mode": "manual",
+  "started_at": "2025-10-10T06:22:33.795522",
+  "completed_stages": [
+    "pytorch",
+    "frontend",
+    "pytorch",
+    "backend",
+    "pytorch",
+    "ffmpeg",
+    "ssl",
+    "libretranslate"
+  ],
+  "timings": {
+    "pytorch": 0.9862179756164551,
+    "frontend": 6.538439989089966,
+    "backend": 193.25006294250488,
+    "ffmpeg": 0.003356456756591797,
+    "ssl": 0.0015263557434082031,
+    "libretranslate": 0.6213462352752686
+  },
+  "errors": [],
+  "version": "2.0",
+  "use_zerocopy": true,
+  "libretranslate_mode": "docker"
+}
