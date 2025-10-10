@@ -169,7 +169,7 @@ A production-grade, GPU-accelerated speech-to-text platform featuring real-time 
 
 Execute the provided installer binary:
 ```
-OnyxTranscribe.exe
+OnyxTranscription.exe
 ```
 
 **Automated Process:**
@@ -184,7 +184,7 @@ The installer functions as both deployment tool and application launcher. Runnin
 
 ---
 
-### Docker Deployment
+### 🐳 Docker Deployment 🐳
 
 **Quick Start:**
 ```bash
