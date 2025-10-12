@@ -113,9 +113,12 @@ export const MobileFooter = () => {
         
         {/* Copyright and legal links – justified with refined spacing */}
         <div className="flex items-center justify-between text-xs text-gray-500 font-light">
-          <p className="text-xs leading-relaxed">
-            © {new Date().getFullYear()} Onyxlab.
-          </p>
+          <div className="flex items-center gap-2">
+            <img src="/favicon.ico" alt="OnyxLab Logo" className="w-4 h-4" />
+            <p className="text-xs leading-relaxed">
+              © {new Date().getFullYear()} Onyxlab.
+            </p>
+          </div>
           <div className="flex gap-4 text-xs">
             <motion.a 
               href="#" 

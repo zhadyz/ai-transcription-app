@@ -326,7 +326,7 @@ class ZeroCopyTransport implements UploadTransport {
   constructor(private readonly backendUrl: string) {
     this.stream = new ZeroCopyStream({
       chunkSize: 64 * 1024,
-      enableIntegrityCheck: true,
+      enableIntegrityCheck: false,  // Backend validates (SHA-256, size, MIME)
       adaptiveChunking: true
     })
   }

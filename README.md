@@ -14,6 +14,34 @@ Experimental transcription app exploring distributed systems, CRDTs, and perform
 
 ## Version History
 
+### Version 1.5.5 - Code Quality & User Experience
+**Release Date:** October 12, 2025
+
+**Core Optimizations:**
+- Verified zero-copy streaming implementation with true O(1) constant memory usage
+- Removed 905 lines of dormant code (WorkStealingScheduler, ContentAddressableChunker, RollingHash, ChunkSizePredictor)
+- Retained production-ready components (BloomFilter, LRUCache, MemoryPool)
+- Refactored code comments to professional engineering standards
+
+**User Experience Enhancements:**
+- Fixed SRT subtitle format to include proper sequence numbering for subtitle player compatibility
+- Integrated favicon across browser tab, desktop footer, and mobile footer
+- Corrected download endpoint URL pattern from `/transcribe/{task_id}/download` to `/transcribe/download/{task_id}`
+- Enhanced clipboard copy functionality with improved error handling and user feedback
+- Updated page title to "Transcription App | Onyxlab"
+
+**Technical Improvements:**
+- Consolidated favicon delivery through public assets directory
+- Updated .gitignore to exclude internal testing files and development artifacts
+- Organized test files into dedicated internal-tests directory
+- Improved code documentation clarity for engineer review
+
+**File Reductions:**
+- FileOperationEngine.ts: 726 lines → 257 lines (65% reduction)
+- ZeroCopyStream.ts: 855 lines → 585 lines (32% reduction)
+
+---
+
 ### Version 1.5.4 - Automated Deployment System
 **Release Date:** October 10, 2025
 

@@ -213,7 +213,7 @@ export default function FileUpload() {
 
   const handleDownload = useCallback(() => {
     if (transcription.taskId) {
-      window.open(`${backendUrl}/transcribe/${transcription.taskId}/download`, '_blank')
+      window.open(`${backendUrl}/transcribe/download/${transcription.taskId}`, '_blank')
     }
   }, [transcription.taskId])
 
@@ -238,21 +238,37 @@ export default function FileUpload() {
   }, [translation.translatedSegments, translation.targetLanguage])
 
   const handleCopyOriginal = useCallback(async () => {
-    if (!transcription.result?.segments) return
+    console.log('🔵 Copy button clicked!')
+    console.log('Segments:', transcription.result?.segments)
 
-    const text = transcription.result.segments
-      .map(s => `${formatTimestamp(s.start)} → ${formatTimestamp(s.end)}\n${s.text}`)
-      .join('\n\n')
+    if (!transcription.result?.segments) {
+      console.error('❌ No segments to copy')
+      return
+    }
 
-    await navigator.clipboard.writeText(text)
-    setCopiedOriginal(true)
+    try {
+      // Format as proper SRT with numbering and standard timestamps
+      const text = transcription.result.segments
+        .map((s, i) => `${i + 1}\n${formatTimestamp(s.start)} --> ${formatTimestamp(s.end)}\n${s.text}`)
+        .join('\n\n')
+
+      console.log('📋 Formatted SRT text:', text.substring(0, 200) + '...')
+
+      await navigator.clipboard.writeText(text)
+      console.log('✅ Copied to clipboard successfully')
+      setCopiedOriginal(true)
+    } catch (error) {
+      console.error('❌ Copy failed:', error)
+      alert(`Copy failed: ${error}. Try using HTTPS or check browser permissions.`)
+    }
   }, [transcription.result])
 
   const handleCopyTranslation = useCallback(async () => {
     if (!translation.translatedSegments.length) return
 
+    // Format as proper SRT with numbering and standard timestamps
     const text = translation.translatedSegments
-      .map(s => `${formatTimestamp(s.start)} → ${formatTimestamp(s.end)}\n${s.text}`)
+      .map((s, i) => `${i + 1}\n${formatTimestamp(s.start)} --> ${formatTimestamp(s.end)}\n${s.text}`)
       .join('\n\n')
 
     await navigator.clipboard.writeText(text)
