@@ -4,6 +4,11 @@ import { SessionProvider } from './core/SessionContext'
 import { WebSocketProvider } from './core/WebSocketContext'
 import { DeviceIndicator } from './components/system/DeviceIndicator'
 
+// ============================================================================
+// TEST LOG - Verify App.tsx loading
+// ============================================================================
+console.log('🎯🎯🎯 [APP.TSX] App component file loaded!')
+
 const FileUpload = lazy(() => import('./components/upload/FileUpload'))
 const MobileUpload = lazy(() => import('./components/upload/MobileUpload'))
 
@@ -23,10 +28,14 @@ const BackgroundMedia = () => (
 )
 
 export default function App() {
-  const backendUrl = useMemo(() => 
-    `http://${window.location.hostname}:8000`, 
+  console.log('🎨🎨🎨 [APP.TSX] App component rendering!')
+
+  const backendUrl = useMemo(() =>
+    `http://${window.location.hostname}:8000`,
     []
   )
+
+  console.log('🔗 [APP.TSX] Backend URL:', backendUrl)
 
   return (
     <BrowserRouter>

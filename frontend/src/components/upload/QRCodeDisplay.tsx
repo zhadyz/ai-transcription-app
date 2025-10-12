@@ -6,15 +6,17 @@ interface QRCodeDisplayProps {
   sessionId: string | null
   qrUrl: string | null
   isConnected: boolean  // ✅ Now comes from useSession (via context)
+  deviceCount?: number  // ✅ Number of devices connected to session
   onFileReceived: (fileInfo: any) => void
   expiresAt?: number
   onRefresh?: () => void
 }
 
-export default function QRCodeDisplay({ 
+export default function QRCodeDisplay({
   sessionId,
-  qrUrl, 
+  qrUrl,
   isConnected,  // ✅ This is now the DistributedSession connection status
+  deviceCount = 0,  // ✅ Number of devices in session
   onFileReceived,
   expiresAt,
   onRefresh
@@ -22,7 +24,6 @@ export default function QRCodeDisplay({
   // ✅ REMOVED: Local wsConnected state (use isConnected prop instead)
   const [expiresIn, setExpiresIn] = useState<number>(0)
   const [filesReceived, setFilesReceived] = useState(0)
-  const [devicesConnected, setDevicesConnected] = useState(0)
   const [lastActivity, setLastActivity] = useState<Date | null>(null)
   
   // ✅ REMOVED: All WebSocket refs and management
@@ -128,7 +129,32 @@ export default function QRCodeDisplay({
     >
       {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-blue-500/5 pointer-events-none"></div>
-      
+
+      {/* Linked glow effect */}
+      <AnimatePresence>
+        {deviceCount > 1 && (
+          <motion.div
+            key="link-glow"
+            initial={{ opacity: 0, scale: 1 }}
+            animate={{
+              opacity: [0.6, 0.3, 0],
+              scale: [1, 1.15, 1.3]
+            }}
+            exit={{ opacity: 0 }}
+            transition={{
+              duration: 2,
+              ease: [0.4, 0, 0.2, 1],
+              times: [0, 0.5, 1]
+            }}
+            className="absolute inset-[-2px] rounded-2xl pointer-events-none"
+            style={{
+              background: 'radial-gradient(circle at center, transparent 30%, rgba(96, 165, 250, 0.4) 70%, rgba(59, 130, 246, 0.6) 85%, transparent 100%)',
+              filter: 'blur(8px)'
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="relative space-y-4">
         {/* Header */}
         <div className="text-center">
@@ -177,10 +203,16 @@ export default function QRCodeDisplay({
           {/* Connection Status */}
           <div className="flex items-center justify-center gap-2 text-xs">
             <div className={`w-2 h-2 rounded-full ${
-              isConnected ? 'bg-green-400 animate-pulse' : 'bg-yellow-500 animate-pulse'
+              deviceCount > 1 ? 'bg-blue-400 animate-pulse' :
+              isConnected ? 'bg-green-400 animate-pulse' :
+              'bg-yellow-500 animate-pulse'
             }`}></div>
-            <span className={isConnected ? 'text-green-400' : 'text-yellow-500'}>
-              {isConnected ? (devicesConnected > 0 ? `${devicesConnected} device linked` : 'Ready') : 'Connecting...'}
+            <span className={
+              deviceCount > 1 ? 'text-blue-400 font-semibold' :
+              isConnected ? 'text-green-400' :
+              'text-yellow-500'
+            }>
+              {deviceCount > 1 ? 'Linked' : isConnected ? 'Ready' : 'Connecting...'}
             </span>
           </div>
 
