@@ -187,6 +187,11 @@ The installer functions as both deployment tool and application launcher. Runnin
 ### 🐳 Docker Deployment 🐳
 
 **Quick Start:**
+
+Click on docker-start.bat in scripts directory
+
+or
+
 ```bash
 # Windows
 docker-compose up --build -d
