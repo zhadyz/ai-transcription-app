@@ -193,62 +193,85 @@ Experimental transcription app exploring distributed systems, CRDTs, and perform
 
 ## Deployment Guide
 
-### Automated Installation (Windows)
+---
 
-Execute the provided installer binary:
+### 🐳 Docker Deployment (EASIEST - Recommended) 🐳
+
+**What you need:**
+- Docker Desktop installed and running
+- That's it!
+
+---
+
+### **→ Windows: ONE-CLICK START ←**
+
+**Double-click this file:**
+```
+START-HERE.bat
+```
+
+**What happens:**
+1. App starts automatically
+2. Browser opens with your app
+3. **Your IP address is displayed on screen**
+4. Done!
+
+The IP address is also saved to `APP-INFO.txt` so you can always find it.
+
+---
+
+### **→ Mac/Linux or Advanced Users ←**
+
+Open terminal in project folder:
+
+```bash
+docker-compose up -d
+```
+
+**Find your app:**
+- On this computer: `http://localhost`
+- From other devices: `http://YOUR-IP-ADDRESS`
+
+**To find your IP address:**
+```bash
+# Mac/Linux
+ifconfig | grep "inet "
+
+# Windows (PowerShell)
+ipconfig | findstr IPv4
+```
+
+**Useful commands:**
+```bash
+docker-compose down        # Stop the app
+docker-compose logs -f     # View logs
+docker-compose restart     # Restart services
+```
+
+---
+
+### **Mobile Access (Any Platform)**
+
+1. Open the app on your computer (steps above)
+2. Click **"Mobile Upload"** in the app
+3. **Scan the QR code** with your phone
+4. Done! Your phone is connected
+
+---
+
+### Automated Installation (Windows) - Alternative Method
+
+For users who prefer automated installation:
 ```
 OnyxTranscription.exe
 ```
 
-**Automated Process:**
-1. System environment detection (Docker/Native deployment modes)
-2. Dependency resolution and installation
-3. SSL certificate generation and configuration
-4. Background service initialization
-5. Browser launch with application URL
+This installer will:
+1. Detect if you have Docker or Python
+2. Install dependencies automatically
+3. Launch the app
 
-**Subsequent Executions:**
-The installer functions as both deployment tool and application launcher. Running the executable after initial installation automatically detects active services and launches the web interface.
-
----
-
-### 🐳 Docker Deployment 🐳
-
-**Quick Start:**
-
-Click on:
-```
-docker-start.bat
-```
-located in /scripts
-
-or
-
-```bash
-# Windows
-docker-compose up --build -d
-
-# Linux/macOS
-docker-compose up --build -d
-```
-
-**Access Points:**
-- Primary Interface: `http://localhost`
-- Backend API: `http://localhost:8000`
-- Mobile Interface: `http://<host-ip>` (QR code provided)
-
-**Management Commands:**
-```bash
-docker-compose up -d              # Initialize services
-docker-compose logs -f            # Monitor application logs
-docker-compose logs -f backend    # Backend-specific logs
-docker-compose logs -f frontend   # Frontend-specific logs
-docker-compose down               # Terminate all services
-docker-compose up --build -d      # Rebuild and deploy
-docker-compose down -v            # Remove volumes and data
-```
-
-Comprehensive Docker documentation available in [DOCKER-README.md](DOCKER-README.md).
+**Note:** If you used `START-HERE.bat`, you don't need this.
 
 ---
 
@@ -278,58 +301,58 @@ Re-execute `python x.py` for automatic service detection and launch.
 
 ## Application Usage
 
-### Launch Procedures
+### How to Start the App
 
-**Windows Platform:**
+**Windows (Docker):**
 ```
-AI-Transcription-Installer.exe
+Double-click: START-HERE.bat
 ```
+Your IP address will be displayed on screen and saved to `APP-INFO.txt`
 
-**Cross-Platform:**
+**Mac/Linux (Docker):**
+```bash
+docker-compose up -d
+```
+Then find your IP with: `ifconfig | grep "inet "`
+
+**Windows (Manual Installation):**
+```
+OnyxTranscription.exe
+```
+or
 ```bash
 python x.py
 ```
 
-Both methods automatically detect running services and initialize the web interface.
+---
 
-### Access Endpoints
+### Accessing the App
 
-**Docker Deployment:**
-- Primary Interface: `http://localhost`
+**From this computer:**
+```
+http://localhost
+```
 
-**Native Deployment:**
-- Primary Interface: `http://192.168.1.x:5173` (IP address displayed in console output)
+**From phone/tablet (for uploading files):**
+```
+http://YOUR-IP-ADDRESS
+```
 
-**Mobile Interface:**
-- QR code authentication available within application
+**Your IP address is shown when you run START-HERE.bat**
 
-### Initial Configuration
-
-The automated installer handles all configuration requirements:
-1. Environment detection and analysis
-2. Dependency installation and verification
-3. Service initialization and health checks
-4. Browser launch with appropriate endpoint
-
-No manual configuration required for standard deployment scenarios.
+If you need to find it later, check `APP-INFO.txt` in the project folder.
 
 ---
 
-### Mobile Device Integration
+### Mobile Upload
 
-**Connection Procedure:**
-1. Launch application on primary workstation
-2. Navigate to "Mobile Upload" interface component
-3. Generate QR authentication code
-4. Scan QR code using mobile device camera
-5. Upload media files from mobile device
-6. Workstation receives and processes files automatically
+1. Start the app on your computer
+2. Open the app in your browser
+3. Click **"Mobile Upload"**
+4. Scan the QR code with your phone
+5. Upload files from your phone!
 
-**Network Requirements:**
-- Devices must be connected to identical network segment
-- Firewall configuration must permit traffic on designated ports:
-  - Docker: 80, 8000
-  - Native: 5173, 8000, 8443
+---
 
 ## System Architecture
 
@@ -672,10 +695,15 @@ app.add_middleware(
 ```
 transcription-platform/
 
-├── OnyxTranscription.exe  # Compiled Windows executable
-├       
+├── START-HERE.bat         # ⭐ ONE-CLICK START (Windows Docker)
+├── APP-INFO.txt           # Auto-generated: Your IP address & access info
+│
+├── OnyxTranscription.exe  # Alternative: Automated installer (Windows)
+│
+├── docker-compose.yml     # Docker configuration
 │
 ├── scripts/
+│   ├── docker-start.bat            # (Deprecated - use START-HERE.bat)
 │   ├── installer.log               # Deployment and runtime logs
 │   └── .install_state.json         # Persistent installation state
 │
