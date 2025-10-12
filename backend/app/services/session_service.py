@@ -71,11 +71,27 @@ class SessionService:
     def mark_connected(self, session_id: str, ws_id: str):
         """Mark a websocket as connected to this session"""
         with self._lock:
-            if session_id in self.sessions:
-                self.sessions[session_id]["connected"] = True
-                if ws_id not in self.websocket_connections[session_id]:
-                    self.websocket_connections[session_id].append(ws_id)
-                logger.info(f"WebSocket {ws_id} connected to session {session_id}")
+            # DIAGNOSTIC: Log session existence
+            if session_id not in self.sessions:
+                logger.error(f"[DIAGNOSTIC] Session {session_id[:8]} NOT FOUND in self.sessions!")
+                logger.error(f"[DIAGNOSTIC] Available sessions: {list(self.sessions.keys())}")
+                return
+
+            logger.info(f"[DIAGNOSTIC] Session {session_id[:8]} EXISTS in self.sessions")
+
+            # Ensure websocket_connections exists for this session
+            if session_id not in self.websocket_connections:
+                logger.warning(f"[DIAGNOSTIC] websocket_connections missing for {session_id[:8]}, initializing")
+                self.websocket_connections[session_id] = []
+
+            self.sessions[session_id]["connected"] = True
+            if ws_id not in self.websocket_connections[session_id]:
+                self.websocket_connections[session_id].append(ws_id)
+                logger.info(f"[DIAGNOSTIC] Added ws_id {ws_id[:8]} to connections list")
+
+            final_count = len(self.websocket_connections[session_id])
+            logger.info(f"[DIAGNOSTIC] Final connection count for session {session_id[:8]}: {final_count}")
+            logger.info(f"WebSocket {ws_id} connected to session {session_id}")
     
     def mark_disconnected(self, session_id: str, ws_id: str):
         """Remove websocket from session"""
@@ -140,14 +156,21 @@ class SessionService:
         """Get session metadata"""
         with self._lock:
             if not self.validate_session(session_id):
+                logger.warning(f"[DIAGNOSTIC] get_session_info: Session {session_id[:8]} validation failed")
                 return None
-            
+
             session = self.sessions[session_id]
+            connection_count = len(self.websocket_connections.get(session_id, []))
+
+            # DIAGNOSTIC: Log what we're returning
+            logger.info(f"[DIAGNOSTIC] get_session_info for {session_id[:8]}: connection_count={connection_count}")
+
             return {
                 "id": session["id"],
                 "created_at": session["created_at"].isoformat(),
                 "expires_at": session["expires_at"].isoformat(),
                 "connected": session["connected"],
+                "connection_count": connection_count,
                 "files_count": len(session["files"]),
                 "time_remaining": int((session["expires_at"] - datetime.now()).total_seconds())
             }

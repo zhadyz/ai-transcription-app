@@ -260,13 +260,15 @@ async def handle_binary_message(
         # CRDT PATCH - Forward to all peers
         # ───────────────────────────────────────────────────────────────────
         if message_type == 'patch':
+            patch_size = len(binary_data)
+            logger.info(f"[WS {ws_id[:8]}] CRDT patch received ({patch_size} bytes) - broadcasting to peers in session {session_id[:8]}")
             await broadcast_to_session_except(
                 session_id,
                 ws_id,
                 binary_data,  # Forward raw binary (zero-copy!)
                 is_binary=True
             )
-            logger.debug(f"[WS {ws_id[:8]}] CRDT patch broadcasted to peers")
+            logger.info(f"[WS {ws_id[:8]}] CRDT patch broadcast complete")
         
         # ───────────────────────────────────────────────────────────────────
         # SYNC REQUEST - Client wants historical patches
@@ -364,8 +366,8 @@ async def broadcast_to_session_except(
                 logger.warning(f"[WS {ws_id[:8]}] Broadcast error: {e}")
                 failed_count += 1
     
-    logger.debug(
-        f"Broadcast complete: {broadcast_count} sent, {failed_count} failed, "
+    logger.info(
+        f"[Broadcast] Complete: {broadcast_count} recipients, {failed_count} failed, "
         f"1 excluded (sender)"
     )
 

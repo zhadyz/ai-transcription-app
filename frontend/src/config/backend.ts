@@ -189,8 +189,8 @@ function getDefaultEndpoint(): BackendEndpoint {
 // SYNCHRONOUS ACCESS (with intelligent fallback)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Start detection immediately
-const detectionPromise = detectBackendEndpoint()
+// Note: Auto-detection disabled, using hardcoded configuration for stability
+const detectionPromise = Promise.resolve(getDefaultEndpoint())
 
 // Provide synchronous access with smart defaults
 const getCurrentEndpoint = (): BackendEndpoint => {
@@ -202,14 +202,15 @@ const getCurrentEndpoint = (): BackendEndpoint => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const getBackendUrl = (): string => {
-  const endpoint = detectedEndpoint || getDefaultEndpoint()
-  return `${endpoint.protocol}://${hostname}:${endpoint.port}`
+  // Hardcoded for stability (change port here if needed)
+  console.log('🔧 [Backend] Using backend URL: http://192.168.1.144:8002')
+  return 'http://192.168.1.144:8002'
 }
 
 export const getWebSocketUrl = (): string => {
-  const endpoint = detectedEndpoint || getDefaultEndpoint()
-  const wsProtocol = endpoint.protocol === 'https' ? 'wss' : 'ws'
-  return `${wsProtocol}://${hostname}:${endpoint.port}`
+  // Hardcoded for stability (change port here if needed)
+  console.log('🔧 [Backend] Using WebSocket URL: ws://192.168.1.144:8002')
+  return 'ws://192.168.1.144:8002'
 }
 
 export const supportsStreaming = (): boolean => {
@@ -256,44 +257,15 @@ export const getBackendConfig = async () => {
 // NETWORK AWARENESS - Auto-redetect on network changes
 // ═══════════════════════════════════════════════════════════════════════════
 
-if (typeof window !== 'undefined') {
-  // Redetect when coming back online
-  window.addEventListener('online', () => {
-    console.log('🌐 [Backend Config] Network online, re-detecting backend...')
-    redetectBackend()
-  })
-
-  // Redetect when page becomes visible (user might have changed network)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && detectedEndpoint) {
-      const timeSinceDetection = Date.now() - (detectedEndpoint as any).detectedAt
-      if (timeSinceDetection > 60000) { // Re-detect after 1 minute
-        console.log('👁️ [Backend Config] Page visible, re-checking backend...')
-        redetectBackend()
-      }
-    }
-  })
-}
+// Note: Network awareness disabled when using hardcoded configuration
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STARTUP - Log final configuration
 // ═══════════════════════════════════════════════════════════════════════════
 
-detectionPromise.then((endpoint) => {
-  const config = {
-    url: `${endpoint.protocol}://${hostname}:${endpoint.port}`,
-    wsUrl: `${endpoint.protocol === 'https' ? 'wss' : 'ws'}://${hostname}:${endpoint.port}`,
-    protocol: endpoint.protocol,
-    port: endpoint.port,
-    isSecure: endpoint.protocol === 'https',
-    streaming: endpoint.supportsStreaming ? '✅ enabled' : '❌ disabled',
-    latency: `${endpoint.latency}ms`
-  }
-  
-  console.log('🔧 [Backend Config] Final configuration:', config)
-  
-  // Store detection timestamp
-  ;(endpoint as any).detectedAt = Date.now()
+console.log('🔧 [Backend Config] Configuration loaded:', {
+  url: 'http://192.168.1.144:8002',
+  wsUrl: 'ws://192.168.1.144:8002'
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -13,7 +13,6 @@ import { TranscriptionSettings } from '@/components/transcription/TranscriptionS
 import { TranscriptionProgress } from '@/components/transcription/TranscriptionProgress'
 import { TranscriptionResult } from '@/components/transcription/TranscriptionResult'
 import { TranslationPanel } from '@/components/transcription/TranslationPanel'
-import { Footer } from '@/components/layout/Footer'
 import QRCodeDisplay from './QRCodeDisplay'
 import { filter } from 'rxjs/operators'
 import { BACKEND_URL } from '@/config/backend'
@@ -452,10 +451,11 @@ export default function FileUpload() {
               transition={{ delay: 0.3 }}
               className="mt-6"
             >
-              <QRCodeDisplay 
+              <QRCodeDisplay
                 sessionId={session.sessionId}
                 qrUrl={session.qrUrl}
                 isConnected={session.isConnected}
+                deviceCount={session.deviceCount}
                 onFileReceived={handleMobileUpload}
                 expiresAt={session.expiresAt || undefined}
                 onRefresh={session.refreshSession}
@@ -464,7 +464,6 @@ export default function FileUpload() {
           )}
         </motion.div>
       </div>
-      <Footer />
     </div>
   )
 }

@@ -166,8 +166,10 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
 
       const data = await response.json()
       const newSessionId = data.session_id
+      const serverIP = data.server_ip || window.location.hostname
 
       console.log('✅ [Desktop] Session created on backend:', newSessionId)
+      console.log('📡 [Desktop] Server IP for QR:', serverIP)
 
       // STEP 3: Wait for backend to fully initialize session (with retry)
       console.log('⏳ [Desktop] Waiting for backend to initialize session...')
@@ -194,7 +196,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
       
       recoveryRef.current = { attempts: 0, lastAttempt: 0, backoffMs: INITIAL_BACKOFF }
 
-      return newSessionId
+      return { sessionId: newSessionId, serverIP }
     } catch (err) {
       console.error('❌ [Desktop] Session creation error:', err)
       return null
@@ -229,15 +231,15 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
 
     destroyCurrentSession()
 
-    const sessionId = await createSession()
-    if (sessionId && mountedRef.current) {
-      await initSession(sessionId)
+    const result = await createSession()
+    if (result && mountedRef.current) {
+      await initSession(result.sessionId, result.serverIP)
     } else if (mountedRef.current) {
       setState(prev => ({ ...prev, error: 'Recovery failed', isConnected: false }))
     }
   }, [createSession, clearPersistedSession, destroyCurrentSession])
 
-  const initSession = useCallback(async (sessionId: string) => {
+  const initSession = useCallback(async (sessionId: string, serverIP?: string) => {
     console.log('🎯 [Desktop] Initializing DistributedSession:', sessionId)
     
     const generateUUID = () => {
@@ -261,10 +263,16 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     const session = new DistributedSession(sessionId, BACKEND_URL(), deviceId, deviceType)
     sessionRef.current = session
 
-    // Generate QR URL
-    const qrUrl = `${window.location.origin}/mobile-upload?session=${sessionId}`
+    // Generate QR URL - Use server IP from backend if available
+    const hostname = serverIP || window.location.hostname
+    const protocol = window.location.protocol
+    const port = window.location.port
+    const qrUrl = `${protocol}//${hostname}${port ? ':' + port : ''}/mobile-upload?session=${sessionId}`
 
     console.log('🌐 [Desktop] QR URL:', qrUrl)
+    if (serverIP && serverIP !== window.location.hostname) {
+      console.log('✅ [Desktop] Using server IP for mobile access:', serverIP)
+    }
 
     if (mountedRef.current) {
       setState(prev => ({ 
@@ -294,13 +302,39 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
         const deviceList = Object.values(devices)
         const currentDevice = devices[deviceId]
 
+        console.log('📱 [Desktop] Devices updated:', {
+          count: deviceList.length,
+          devices: deviceList.map(d => ({ id: d.id.slice(0, 8), type: d.type, role: d.role }))
+        })
+
         setState(prev => ({
           ...prev,
-          deviceCount: deviceList.length,
           role: currentDevice?.role || null
         }))
       }
     })
+
+    // Simple polling for connection count (fallback for status indicator)
+    const pollConnectionCount = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL()}/session/${sessionId}/info`)
+        if (response.ok) {
+          const info = await response.json()
+          const connectionCount = info.connection_count || 0
+          if (mountedRef.current) {
+            setState(prev => ({
+              ...prev,
+              deviceCount: connectionCount
+            }))
+          }
+        }
+      } catch (err) {
+        // Silently fail
+      }
+    }
+
+    pollConnectionCount()
+    const pollInterval = setInterval(pollConnectionCount, 2000)
 
     // Heartbeat
     heartbeatRef.current = setInterval(() => {
@@ -315,6 +349,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     cleanupRef.current = () => {
       connectionSub.unsubscribe()
       devicesSub.unsubscribe()
+      clearInterval(pollInterval)
       if (heartbeatRef.current) {
         clearInterval(heartbeatRef.current)
         heartbeatRef.current = null
@@ -328,9 +363,9 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     mountedRef.current = true
 
     const init = async () => {
-      const sessionId = await createSession()
-      if (sessionId && mountedRef.current) {
-        await initSession(sessionId)
+      const result = await createSession()
+      if (result && mountedRef.current) {
+        await initSession(result.sessionId, result.serverIP)
       }
     }
 
@@ -376,15 +411,15 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
 
   const refreshSession = useCallback(async () => {
     console.log('🔄 [Desktop] Manual refresh')
-    
+
     destroyCurrentSession()
     clearPersistedSession()
 
     recoveryRef.current = { attempts: 0, lastAttempt: 0, backoffMs: INITIAL_BACKOFF }
 
-    const sessionId = await createSession()
-    if (sessionId && mountedRef.current) {
-      await initSession(sessionId)
+    const result = await createSession()
+    if (result && mountedRef.current) {
+      await initSession(result.sessionId, result.serverIP)
     }
   }, [createSession, initSession, destroyCurrentSession, clearPersistedSession])
 
