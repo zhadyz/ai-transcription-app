@@ -9,7 +9,7 @@ ENV/
 **/venv/
 **/.venv/
 backend/.pip_cache/
-.exe
+*.exe
 
 # Python compiled files
 __pycache__/
@@ -116,3 +116,10 @@ desktop.ini
 test_*.mp3
 test_*.wav
 sample_*.mkv
+
+# ============================================
+# Internal Testing & Development
+# ============================================
+internal-tests/
+.claude/
+nul

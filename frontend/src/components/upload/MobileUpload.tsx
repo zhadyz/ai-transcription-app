@@ -165,8 +165,9 @@ function MobileUploadContent() {
   const handleCopy = async () => {
     if (!transcription.result) return
     try {
+      // Format as proper SRT with numbering and standard timestamps
       const text = transcription.result.segments
-        .map(segment => `${formatTimestamp(segment.start)} → ${formatTimestamp(segment.end)}\n${segment.text}`)
+        .map((segment, i) => `${i + 1}\n${formatTimestamp(segment.start)} --> ${formatTimestamp(segment.end)}\n${segment.text}`)
         .join('\n\n')
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -178,8 +179,9 @@ function MobileUploadContent() {
   const handleCopyTranslation = async () => {
     if (!translation.translatedSegments.length) return
     try {
+      // Format as proper SRT with numbering and standard timestamps
       const text = translation.translatedSegments
-        .map(segment => `${formatTimestamp(segment.start)} → ${formatTimestamp(segment.end)}\n${segment.text}`)
+        .map((segment, i) => `${i + 1}\n${formatTimestamp(segment.start)} --> ${formatTimestamp(segment.end)}\n${segment.text}`)
         .join('\n\n')
       await navigator.clipboard.writeText(text)
       setCopiedTranslation(true)
