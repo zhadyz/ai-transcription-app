@@ -188,7 +188,11 @@ The installer functions as both deployment tool and application launcher. Runnin
 
 **Quick Start:**
 
-Click on docker-start.bat in scripts directory
+Click on:
+```
+docker-start.bat
+```
+located in /scripts
 
 or
 
