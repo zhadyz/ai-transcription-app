@@ -123,3 +123,8 @@ sample_*.mkv
 internal-tests/
 .claude/
 nul
+
+# ============================================
+# Auto-generated User Files
+# ============================================
+APP-INFO.txt
