@@ -27,7 +27,6 @@ Experimental transcription app exploring distributed systems, CRDTs, and perform
 - Enhanced session service with connection count tracking
 - Added diagnostic logging for troubleshooting connection issues
 - Resolved zombie backend process issues through port isolation
-- Created comprehensive troubleshooting guide (.claude/TROUBLESHOOTING.md)
 
 ---
 
