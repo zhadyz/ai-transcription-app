@@ -14,6 +14,40 @@ Experimental transcription app exploring distributed systems, CRDTs, and perform
 
 ## Version History
 
+### Version 1.5.7 - Mobile-Desktop Link Detection
+**Release Date:** October 12, 2025
+
+**Features:**
+- Desktop QR code display now shows "Linked" status when phone connects
+- Added elegant gradient glow animation on successful device pairing
+- Implemented backend WebSocket connection tracking system
+- Frontend polling mechanism for real-time device count updates
+
+**Technical Improvements:**
+- Enhanced session service with connection count tracking
+- Added diagnostic logging for troubleshooting connection issues
+- Resolved zombie backend process issues through port isolation
+- Created comprehensive troubleshooting guide (.claude/TROUBLESHOOTING.md)
+
+---
+
+### Version 1.5.6 - Simplified Docker Deployment
+**Release Date:** October 12, 2025
+
+**User Experience Improvements:**
+- Created START-HERE.bat for one-click Docker deployment on Windows
+- Auto-displays IP address prominently on screen after startup
+- Saves IP address to APP-INFO.txt for easy reference
+- Simplified README with clear, beginner-friendly instructions
+- Consolidated mobile access instructions with numbered steps
+
+**Technical Changes:**
+- Smart IP detection prioritizing local network (192.168.1.x)
+- Browser auto-launch with network IP instead of localhost
+- Reduced deployment script complexity by 58% (246 → 100 lines)
+
+---
+
 ### Version 1.5.5 - Code Quality & User Experience
 **Release Date:** October 12, 2025
 
