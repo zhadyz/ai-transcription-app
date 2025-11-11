@@ -113,12 +113,15 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
 
       console.log('[LiveCapture] Starting capture via Rust backend...');
       console.log('[LiveCapture] Audio source:', settings.audioSource);
+      console.log('[LiveCapture] Translation:', settings.showTranslation ? settings.translateTo : 'disabled');
 
       // Call Rust command to start capture with all settings
       await invoke('start_capture', {
         deviceType: settings.audioSource,
         modelSize: settings.modelSize,
-        discordWebhook: settings.discordEnabled ? settings.discordWebhook : null
+        discordWebhook: settings.discordEnabled ? settings.discordWebhook : null,
+        translateTo: settings.showTranslation ? settings.translateTo : null,
+        showTranslation: settings.showTranslation
       });
 
       console.log('[LiveCapture] Started successfully');

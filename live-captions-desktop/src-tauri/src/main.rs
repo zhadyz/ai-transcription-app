@@ -436,6 +436,8 @@ async fn start_capture(
     device_type: String,
     model_size: String,
     discord_webhook: Option<String>,
+    translate_to: Option<String>,
+    show_translation: bool,
 ) -> Result<String, String> {
     let mut is_capturing = state.is_capturing.lock().unwrap();
 
@@ -542,8 +544,11 @@ async fn start_capture(
                 let config = serde_json::json!({
                     "type": "config",
                     "language": null,
-                    "model_size": model_size
+                    "model_size": model_size,
+                    "translate_to": translate_to,
+                    "show_translation": show_translation
                 });
+                println!("[WS_TASK_{}] Sending config: translate_to={:?}, show_translation={}", task_id, translate_to, show_translation);
                 let _ = write.send(Message::Text(config.to_string())).await;
 
                 // Spawn audio sender task
@@ -651,8 +656,28 @@ async fn start_capture(
                                         } else {
                                             eprintln!("⚠ Overlay window not found, cannot emit caption");
                                         }
+                                    } else if data["type"] == "translation" {
+                                        println!("[WS] ✓ Translation message detected");
+                                        let translation = CaptionPayload {
+                                            text: data["text"].as_str().unwrap_or("").to_string(),
+                                            language: data["language"].as_str().unwrap_or("").to_string(),
+                                            timestamp: data["timestamp"].as_u64().unwrap_or(0),
+                                        };
+
+                                        println!("🌐 Translation: {}", translation.text);
+
+                                        // Emit translation to overlay (replaces caption if showTranslation is enabled)
+                                        if let Some(overlay) = app_handle_ws.get_webview_window("overlay") {
+                                            println!("[EMIT] Emitting translation to overlay window...");
+                                            match overlay.emit("caption", &translation) {
+                                                Ok(_) => println!("✓ Translation emitted to overlay window successfully"),
+                                                Err(e) => eprintln!("❌ Failed to emit translation to overlay: {}", e),
+                                            }
+                                        } else {
+                                            eprintln!("⚠ Overlay window not found, cannot emit translation");
+                                        }
                                     } else {
-                                        println!("[WS] Skipping non-caption message (type: {:?})", data.get("type"));
+                                        println!("[WS] Skipping non-caption/translation message (type: {:?})", data.get("type"));
                                     }
                                 }
                                 Err(e) => {
