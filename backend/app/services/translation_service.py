@@ -55,11 +55,16 @@ class NLLBTranslationService:
 
         logger.info(f"Loading NLLB-200 translation model ({model_size})...")
         
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir="./models")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            cache_dir="./models",
+            use_safetensors=True
+        )
         self.model = AutoModelForSeq2SeqLM.from_pretrained(
             model_name,
             cache_dir="./models",
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            use_safetensors=True
         ).to(self.device)
 
         logger.info(f"✓ NLLB-200 ({model_size}) loaded on {self.device}")

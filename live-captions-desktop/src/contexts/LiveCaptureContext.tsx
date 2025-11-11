@@ -19,6 +19,8 @@ export interface LiveCaptureSettings {
   showTranslation: boolean;
   modelSize: 'tiny' | 'small' | 'medium';
   audioSource: 'microphone' | 'system';
+  discordWebhook?: string | null;
+  discordEnabled: boolean;
 }
 
 export interface Caption {
@@ -69,14 +71,27 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
   const [volume, setVolume] = useState(0);
   const [currentCaption, setCurrentCaption] = useState<Caption | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<LiveCaptureSettings>({
-    language: null,
-    translateTo: null,
-    fontSize: 'large',
-    position: 'bottom',
-    showTranslation: false,
-    modelSize: 'medium',
-    audioSource: 'microphone',
+  const [settings, setSettings] = useState<LiveCaptureSettings>(() => {
+    // Load saved settings from localStorage
+    const saved = localStorage.getItem('liveCaptureSettings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved settings:', e);
+      }
+    }
+    return {
+      language: null,
+      translateTo: null,
+      fontSize: 'large',
+      position: 'bottom',
+      showTranslation: false,
+      modelSize: 'medium',
+      audioSource: 'microphone',
+      discordWebhook: null,
+      discordEnabled: false,
+    };
   });
 
   // Tauri desktop always supports audio capture via Rust backend
@@ -99,10 +114,11 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
       console.log('[LiveCapture] Starting capture via Rust backend...');
       console.log('[LiveCapture] Audio source:', settings.audioSource);
 
-      // Call Rust command to start capture with device type and model size
+      // Call Rust command to start capture with all settings
       await invoke('start_capture', {
         deviceType: settings.audioSource,
-        modelSize: settings.modelSize
+        modelSize: settings.modelSize,
+        discordWebhook: settings.discordEnabled ? settings.discordWebhook : null
       });
 
       console.log('[LiveCapture] Started successfully');
@@ -137,10 +153,14 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
   }, []);
 
   /**
-   * Update settings
+   * Update settings and persist to localStorage
    */
   const updateSettings = useCallback((newSettings: Partial<LiveCaptureSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    setSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      localStorage.setItem('liveCaptureSettings', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   /**

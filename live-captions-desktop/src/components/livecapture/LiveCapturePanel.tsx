@@ -30,6 +30,7 @@ export const LiveCapturePanel: React.FC = () => {
   } = useLiveCapture();
 
   const [showSettings, setShowSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState<'basic' | 'advanced'>('basic');
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close settings
@@ -175,9 +176,36 @@ export const LiveCapturePanel: React.FC = () => {
                 className="overflow-hidden"
               >
                 <div className="px-3 pb-3 pt-2 space-y-2.5" style={{ borderTop: "1px solid rgba(180, 120, 30, 0.2)" }}>
-                  {/* Audio Source */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-amber-200/50 font-medium">Source</span>
+                  {/* Tab Navigation */}
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      onClick={() => setActiveTab('basic')}
+                      className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                        activeTab === 'basic'
+                          ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                          : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      Basic
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('advanced')}
+                      className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                        activeTab === 'advanced'
+                          ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                          : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      Advanced
+                    </button>
+                  </div>
+
+                  {/* Basic Tab */}
+                  {activeTab === 'basic' && (
+                    <>
+                      {/* Audio Source */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-amber-200/50 font-medium">Source</span>
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => updateSettings({ audioSource: 'microphone' })}
@@ -199,11 +227,50 @@ export const LiveCapturePanel: React.FC = () => {
                       >
                         🔊 System
                       </button>
-                    </div>
-                  </div>
+                        </div>
+                      </div>
 
-                  {/* Font Size */}
-                  <div className="flex items-center justify-between gap-2">
+                      {/* Translation */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-amber-200/50 font-medium">Translate</span>
+                        <div className="flex items-center gap-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={settings.showTranslation}
+                              onChange={(e) => updateSettings({ showTranslation: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-white/10 peer-focus:ring-1 peer-focus:ring-amber-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600/60"></div>
+                          </label>
+                          {settings.showTranslation && (
+                            <select
+                              value={settings.translateTo || ''}
+                              onChange={(e) => updateSettings({ translateTo: e.target.value || null })}
+                              className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-white text-xs
+                                focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all"
+                            >
+                              <option value="" className="bg-gray-900">Lang</option>
+                              <option value="en" className="bg-gray-900">EN</option>
+                              <option value="es" className="bg-gray-900">ES</option>
+                              <option value="fr" className="bg-gray-900">FR</option>
+                              <option value="de" className="bg-gray-900">DE</option>
+                              <option value="it" className="bg-gray-900">IT</option>
+                              <option value="pt" className="bg-gray-900">PT</option>
+                              <option value="zh" className="bg-gray-900">ZH</option>
+                              <option value="ja" className="bg-gray-900">JA</option>
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Advanced Tab */}
+                  {activeTab === 'advanced' && (
+                    <>
+                      {/* Font Size */}
+                      <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-amber-200/50 font-medium">Size</span>
                     <div className="flex gap-1.5">
                       {(['small', 'medium', 'large', 'xlarge'] as const).map((size) => (
@@ -282,39 +349,38 @@ export const LiveCapturePanel: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Translation */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-amber-200/50 font-medium">Translate</span>
-                    <div className="flex items-center gap-2">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={settings.showTranslation}
-                          onChange={(e) => updateSettings({ showTranslation: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-white/10 peer-focus:ring-1 peer-focus:ring-amber-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600/60"></div>
-                      </label>
-                      {settings.showTranslation && (
-                        <select
-                          value={settings.translateTo || ''}
-                          onChange={(e) => updateSettings({ translateTo: e.target.value || null })}
-                          className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-white text-xs
-                            focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all"
-                        >
-                          <option value="" className="bg-gray-900">Lang</option>
-                          <option value="en" className="bg-gray-900">EN</option>
-                          <option value="es" className="bg-gray-900">ES</option>
-                          <option value="fr" className="bg-gray-900">FR</option>
-                          <option value="de" className="bg-gray-900">DE</option>
-                          <option value="it" className="bg-gray-900">IT</option>
-                          <option value="pt" className="bg-gray-900">PT</option>
-                          <option value="zh" className="bg-gray-900">ZH</option>
-                          <option value="ja" className="bg-gray-900">JA</option>
-                        </select>
-                      )}
-                    </div>
-                  </div>
+                      {/* Discord Webhook */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4" viewBox="0 0 127.14 96.36" fill="currentColor" style={{color: '#5865F2'}}>
+                              <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
+                            </svg>
+                            <span className="text-xs text-amber-200/50 font-medium">Discord</span>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={settings.discordEnabled}
+                              onChange={(e) => updateSettings({ discordEnabled: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-white/10 peer-focus:ring-1 peer-focus:ring-amber-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600/60"></div>
+                          </label>
+                        </div>
+                        {settings.discordEnabled && (
+                          <input
+                            type="text"
+                            placeholder="Webhook URL"
+                            value={settings.discordWebhook || ''}
+                            onChange={(e) => updateSettings({ discordWebhook: e.target.value || null })}
+                            className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded-md text-white text-xs
+                              placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all"
+                          />
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </motion.div>
             )}

@@ -44,6 +44,7 @@ struct AppState {
     ws_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<f32>>>>>,
     log_file: Arc<Mutex<Option<BufWriter<File>>>>,
     log_dir: Arc<Mutex<PathBuf>>,
+    discord_webhook: Arc<Mutex<Option<String>>>,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -434,6 +435,7 @@ async fn start_capture(
     state: State<'_, AppState>,
     device_type: String,
     model_size: String,
+    discord_webhook: Option<String>,
 ) -> Result<String, String> {
     let mut is_capturing = state.is_capturing.lock().unwrap();
 
@@ -498,6 +500,14 @@ async fn start_capture(
         }
     };
 
+    // Store Discord webhook
+    if let Some(webhook_url) = &discord_webhook {
+        *state.discord_webhook.lock().unwrap() = Some(webhook_url.clone());
+        println!("✓ Discord webhook configured");
+    } else {
+        *state.discord_webhook.lock().unwrap() = None;
+    }
+
     // Start WebSocket connection
     let (audio_tx, mut audio_rx) = mpsc::unbounded_channel::<Vec<f32>>();
     *state.ws_tx.lock().unwrap() = Some(audio_tx);
@@ -506,6 +516,7 @@ async fn start_capture(
     let app_handle_ws = app_handle.clone();
     let log_file_clone = state.log_file.clone();
     let log_dir_clone = state.log_dir.clone();
+    let discord_webhook_clone = state.discord_webhook.clone();
     let task_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -595,6 +606,26 @@ async fn start_capture(
                                         // Write to log file (lazy initialization on first caption)
                                         if let Err(e) = write_caption_to_log(&log_file_clone, &log_dir_clone, &caption.text, &caption.language) {
                                             eprintln!("⚠ Failed to write caption to log: {}", e);
+                                        }
+
+                                        // POST to Discord webhook
+                                        if let Some(webhook_url) = discord_webhook_clone.lock().unwrap().as_ref() {
+                                            let client = reqwest::Client::new();
+                                            let discord_payload = serde_json::json!({
+                                                "content": &caption.text
+                                            });
+
+                                            let webhook_url_clone = webhook_url.clone();
+                                            tokio::spawn(async move {
+                                                match client.post(&webhook_url_clone)
+                                                    .json(&discord_payload)
+                                                    .send()
+                                                    .await
+                                                {
+                                                    Ok(_) => println!("✓ Posted caption to Discord"),
+                                                    Err(e) => eprintln!("⚠ Failed to post to Discord: {}", e),
+                                                }
+                                            });
                                         }
 
                                         // Emit to the OVERLAY window
@@ -961,6 +992,7 @@ fn main() {
         ws_tx: Arc::new(Mutex::new(None)),
         log_file: Arc::new(Mutex::new(None)),
         log_dir: Arc::new(Mutex::new(PathBuf::new())),
+        discord_webhook: Arc::new(Mutex::new(None)),
     };
 
     tauri::Builder::default()
