@@ -7,19 +7,21 @@ services:
       dockerfile: Dockerfile
     container_name: transcription-backend
     restart: unless-stopped
-    
+    command: ["hypercorn", "app.main:app", "--bind", "0.0.0.0:8000", "--keep-alive", "300", "--workers", "1", "--reload"]
+
     # Expose on HOST network (not just container network)
     ports:
       - "8000:8000"   # HTTP - matches local
       - "8443:8443"   # HTTPS - for streaming
-    
+
     volumes:
+      - ./backend/app:/app/app
       - ./backend/storage:/app/storage
       - ./backend/logs:/app/logs
       # SSL certs for HTTPS streaming
       - ./backend/localhost+2.pem:/app/localhost+2.pem:ro
       - ./backend/localhost+2-key.pem:/app/localhost+2-key.pem:ro
-    
+
     environment:
       - ENV=production
       - API_HOST=0.0.0.0

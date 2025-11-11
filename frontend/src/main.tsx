@@ -9,7 +9,5 @@ import './styles/index.css'
 // Debug logs removed - console visibility issue on user's Chrome
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <App />
 )

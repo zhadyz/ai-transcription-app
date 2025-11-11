@@ -1,0 +1,66 @@
+================================================================================
+LIVE CAPTION SYSTEM - DIAGNOSIS STATUS
+Generated: 2025-11-11 05:06 PST (while you slept)
+================================================================================
+
+BACKEND WEBSOCKET BINARY RECEPTION:  ✓ WORKING (tested & verified)
+TAURI APP AUDIO CAPTURE (CPAL):      ✗ NOT WORKING (callback never invoked)
+WHISPER TRANSCRIPTION:                ? UNKNOWN (needs real speech, not silence)
+
+================================================================================
+ROOT CAUSE
+================================================================================
+
+CPAL audio callback in Tauri app is NEVER being invoked.
+This means NO audio data flows from app to backend.
+
+Evidence: ZERO "[AUDIO_CALLBACK]" logs in any capture session.
+
+================================================================================
+NEXT STEP FOR YOU
+================================================================================
+
+1. Click "Start Live Captions" in Tauri app
+2. KEEP overlay open (don't close it!)
+3. Play test.mp3 through SPEAKERS
+4. Watch terminal for "[AUDIO_CALLBACK]" logs
+
+If you see callbacks:  CPAL works, move to testing Whisper
+If no callbacks:       CPAL issue, debug main.rs stream setup
+
+================================================================================
+FILES TO READ
+================================================================================
+
+1. WAKE_UP_README.md - Start here (user-friendly summary)
+2. AUTOMATED_DIAGNOSTIC_REPORT.md - Full technical details
+3. REALTIME_DIAGNOSTIC_REPORT.md - Previous session findings
+
+================================================================================
+WHAT I DID NOT DO (per your instructions)
+================================================================================
+
+✓ Did NOT kill any processes
+✓ Did NOT claim "it's working"
+✓ Did NOT say "production-ready"
+✓ Did NOT make code changes (diagnosis only)
+
+================================================================================
+WHAT I DID
+================================================================================
+
+✓ Verified backend receives binary WebSocket messages (64KB test)
+✓ Identified CPAL callback never invokes (zero logs)
+✓ Analyzed Whisper transcription logic (requires speech or 10s)
+✓ Created comprehensive diagnostic reports
+✓ Documented exact next steps for you
+
+================================================================================
+BOTTOM LINE
+================================================================================
+
+Backend works. Tauri app doesn't send audio because CPAL callback never fires.
+
+Needs 5-minute test: Keep overlay open + play audio → check for callback logs.
+
+================================================================================

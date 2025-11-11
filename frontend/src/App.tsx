@@ -3,6 +3,8 @@ import { lazy, Suspense, useMemo } from 'react'
 import { SessionProvider } from './core/SessionContext'
 import { WebSocketProvider } from './core/WebSocketContext'
 import { DeviceIndicator } from './components/system/DeviceIndicator'
+import { LiveCaptureProvider } from './contexts/LiveCaptureContext'
+import { LiveCapturePanel } from './components/livecapture'
 
 // ============================================================================
 // TEST LOG - Verify App.tsx loading
@@ -41,29 +43,36 @@ export default function App() {
     <BrowserRouter>
       <SessionProvider backendUrl={backendUrl}>
         <WebSocketProvider>
-          <div className="relative min-h-screen bg-black">
-            <BackgroundMedia />
-            <DeviceIndicator />
+          <LiveCaptureProvider>
+            <div className="relative min-h-screen bg-black">
+              <BackgroundMedia />
+              <DeviceIndicator />
 
-            <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
-              <Routes>
-                <Route path="/" element={
-                  <div className="relative z-10 container mx-auto px-4 py-12">
-                    <header className="text-center mb-12">
-                      <h1 className="text-5xl font-bold text-white mb-4">
-                        AI Transcription Studio
-                      </h1>
-                      <p className="text-xl text-gray-400">
-                        Transform audio and video into accurate transcripts
-                      </p>
-                    </header>
-                    <FileUpload />
-                  </div>
-                } />
-                <Route path="/mobile-upload" element={<MobileUpload />} />
-              </Routes>
-            </Suspense>
-          </div>
+              {/* Live Transcription Button - Fixed Top Right */}
+              <div className="fixed top-4 right-4 z-50">
+                <LiveCapturePanel />
+              </div>
+
+              <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+                <Routes>
+                  <Route path="/" element={
+                    <div className="relative z-10 container mx-auto px-4 py-12">
+                      <header className="text-center mb-12">
+                        <h1 className="text-5xl font-bold text-white mb-4">
+                          AI Transcription Studio
+                        </h1>
+                        <p className="text-xl text-gray-400">
+                          Transform audio and video into accurate transcripts
+                        </p>
+                      </header>
+                      <FileUpload />
+                    </div>
+                  } />
+                  <Route path="/mobile-upload" element={<MobileUpload />} />
+                </Routes>
+              </Suspense>
+            </div>
+          </LiveCaptureProvider>
         </WebSocketProvider>
       </SessionProvider>
     </BrowserRouter>

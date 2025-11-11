@@ -21,7 +21,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.api.routes import system
-from app.api.routes import transcribe, session, websocket, translate_text
+from app.api.routes import transcribe, session, websocket, translate_text, realtime
 from app.services.session_service import session_service
 from app.config import settings
 from app.logging_config import setup_logging, get_logger, set_request_id, clear_request_id
@@ -226,6 +226,7 @@ app.add_middleware(
 
 app.include_router(transcribe.router)
 app.include_router(session.router)
+app.include_router(realtime.router)  # Real-time transcription (MUST be before websocket.router!)
 app.include_router(websocket.router)
 app.include_router(translate_text.router)
 app.include_router(system.router)
@@ -248,6 +249,7 @@ async def root():
             "GPU-accelerated processing",
             "Mobile device upload via QR code",
             "Real-time WebSocket progress updates",
+            "Real-time live caption transcription",
             "Multi-language translation support",
             f"Large file support (up to {settings.MAX_FILE_SIZE_MB}MB)"
         ],

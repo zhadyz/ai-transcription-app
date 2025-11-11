@@ -1,0 +1,211 @@
+import { HashRouter, Routes, Route } from 'react-router-dom'
+import { lazy, Suspense, useMemo } from 'react'
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from '@tauri-apps/api/core';
+import { SessionProvider } from './core/SessionContext'
+import { WebSocketProvider } from './core/WebSocketContext'
+import { DeviceIndicator } from './components/system/DeviceIndicator'
+import { LiveCaptureProvider, useLiveCapture } from './contexts/LiveCaptureContext'
+import { LiveCapturePanel, CaptionOverlay } from './components/livecapture'
+import Overlay from './Overlay'
+
+const FileUpload = lazy(() => import('./components/upload/FileUpload'))
+const MobileUpload = lazy(() => import('./components/upload/MobileUpload'))
+
+const BACKGROUND_VIDEO = "https://storage.googleapis.com/onyxlab/Onyx.mp4"
+
+const BackgroundMedia = () => (
+  <video
+    autoPlay
+    loop
+    muted
+    playsInline
+    className="absolute inset-0 w-full h-full object-cover opacity-30"
+    loading="lazy"
+  >
+    <source src={BACKGROUND_VIDEO} type="video/mp4" />
+  </video>
+)
+
+// Custom Title Bar with STYGIAN branding
+function TitleBar() {
+  const appWindow = getCurrentWindow();
+
+  const minimizeWindow = async () => {
+    await appWindow.minimize();
+  };
+
+  const maximizeWindow = async () => {
+    await appWindow.toggleMaximize();
+  };
+
+  const closeWindow = async () => {
+    await appWindow.close();
+  };
+
+  return (
+    <div
+      className="h-10 w-full flex items-center justify-between px-3 backdrop-blur-2xl"
+      style={{
+        background: "linear-gradient(135deg, rgba(50, 45, 20, 0.45) 0%, rgba(60, 50, 22, 0.50) 50%, rgba(55, 47, 18, 0.45) 100%)",
+        borderBottom: "1px solid rgba(255, 200, 50, 0.25)",
+        boxShadow: "0 2px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 200, 60, 0.15)",
+      }}
+    >
+      {/* App Title - DRAGGABLE */}
+      <div
+        data-tauri-drag-region
+        className="flex items-center ml-4 flex-1 h-full select-none"
+      >
+        <span
+          className="text-base font-light tracking-[0.3em] uppercase"
+          style={{
+            color: "#e89a2f",
+            textShadow: "0 0 10px rgba(255, 140, 0, 0.5), 0 0 20px rgba(228, 154, 47, 0.3)",
+            letterSpacing: "0.25em",
+          }}
+        >
+          STYGIAN
+        </span>
+      </div>
+
+      {/* Window Controls - NOT DRAGGABLE */}
+      <div className="flex items-center gap-1" style={{ pointerEvents: 'auto', userSelect: 'none' }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('Minimize clicked');
+            minimizeWindow();
+          }}
+          className="w-9 h-7 rounded flex items-center justify-center
+                     hover:bg-amber-500/20 transition-all duration-200 group"
+          style={{
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            zIndex: 9999,
+            position: 'relative'
+          }}
+        >
+          <span className="text-amber-200/70 group-hover:text-amber-200 text-base leading-none font-light" style={{ pointerEvents: 'none' }}>−</span>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('Maximize clicked');
+            maximizeWindow();
+          }}
+          className="w-9 h-7 rounded flex items-center justify-center
+                     hover:bg-amber-500/20 transition-all duration-200 group"
+          style={{
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            zIndex: 9999,
+            position: 'relative'
+          }}
+        >
+          <span className="text-amber-200/70 group-hover:text-amber-200 text-sm leading-none font-light" style={{ pointerEvents: 'none' }}>□</span>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('Close clicked');
+            closeWindow();
+          }}
+          className="w-9 h-7 rounded flex items-center justify-center
+                     hover:bg-red-600/80 transition-all duration-200 group"
+          style={{
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            zIndex: 9999,
+            position: 'relative'
+          }}
+        >
+          <span className="text-amber-200/70 group-hover:text-white text-xl leading-none font-light" style={{ pointerEvents: 'none' }}>×</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Component to display live captions from context
+function LiveCaptionsDisplay() {
+  const { currentCaption, settings } = useLiveCapture();
+
+  return (
+    <CaptionOverlay
+      caption={currentCaption}
+      position={settings.position}
+      fontSize={settings.fontSize}
+      showTranslation={settings.showTranslation}
+    />
+  );
+}
+
+export default function App() {
+  console.log('🎨 [STYGIAN] App component rendering!')
+
+  // For Tauri desktop app, backend runs on localhost:8000
+  const backendUrl = useMemo(() => 'http://localhost:8000', [])
+
+  console.log('🔗 [STYGIAN] Backend URL:', backendUrl)
+
+  return (
+    <HashRouter>
+      <Routes>
+        {/* Overlay route - standalone, no wrapping */}
+        <Route path="/overlay" element={<Overlay />} />
+
+        {/* Main app routes - with full layout */}
+        <Route path="*" element={
+          <SessionProvider backendUrl={backendUrl}>
+            <WebSocketProvider>
+              <LiveCaptureProvider>
+                {/* Main container with custom title bar */}
+                <div className="h-screen w-full flex flex-col bg-black overflow-hidden">
+                  {/* STYGIAN Custom Title Bar */}
+                  <TitleBar />
+
+                  {/* Main content area with web application */}
+                  <div className="flex-1 relative overflow-y-auto">
+                    <BackgroundMedia />
+                    <DeviceIndicator />
+
+                    {/* Test Caption Button - DEBUG ONLY */}
+                    <button
+                      onClick={async () => {
+                        console.log('[Test] Sending test caption...');
+                        try {
+                          const result = await invoke('test_caption');
+                          console.log('[Test] Result:', result);
+                        } catch (err) {
+                          console.error('[Test] Error:', err);
+                        }
+                      }}
+                      className="fixed top-16 right-6 z-50 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold shadow-lg"
+                    >
+                      Test Caption
+                    </button>
+
+                    <LiveCapturePanel />
+                    <LiveCaptionsDisplay />
+
+                    <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+                      <Routes>
+                        <Route path="/" element={
+                          <div className="relative z-10 container mx-auto px-4 py-12">
+                            <FileUpload />
+                          </div>
+                        } />
+                        <Route path="/mobile-upload" element={<MobileUpload />} />
+                      </Routes>
+                    </Suspense>
+                  </div>
+                </div>
+              </LiveCaptureProvider>
+            </WebSocketProvider>
+          </SessionProvider>
+        } />
+      </Routes>
+    </HashRouter>
+  )
+}

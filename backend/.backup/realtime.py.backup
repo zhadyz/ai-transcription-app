@@ -1,0 +1,435 @@
+"""
+═══════════════════════════════════════════════════════════════════════════
+REAL-TIME TRANSCRIPTION WEBSOCKET ENDPOINT
+═══════════════════════════════════════════════════════════════════════════
+
+WebSocket endpoint for streaming real-time transcription:
+- Receives audio chunks from browser (Float32Array from Web Audio API)
+- Processes audio with RealtimeTranscriptionService
+- Streams transcription results back in real-time
+- Optional: Real-time translation integration
+
+Protocol:
+1. Client connects: WS /ws/realtime
+2. Client sends config: {"type": "config", "language": "en", "translate_to": "es"}
+3. Client streams audio: Binary frames (Float32Array as bytes)
+4. Server sends captions: {"type": "caption", "text": "...", "language": "en"}
+5. Server sends translations: {"type": "translation", "text": "...", "language": "es"}
+"""
+
+import asyncio
+import json
+import logging
+import time
+import uuid
+import struct
+from typing import Dict, Optional
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import numpy as np
+
+from app.services.realtime_transcription_service import (
+    get_realtime_service,
+    AudioBuffer,
+    RealtimeSegment
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ACTIVE SESSION TRACKING
+# ═══════════════════════════════════════════════════════════════════════════
+
+active_realtime_sessions: Dict[str, dict] = {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WEBSOCKET ENDPOINT
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.websocket("/ws/realtime")
+async def realtime_transcription_websocket(websocket: WebSocket):
+    """
+    Real-time transcription WebSocket endpoint.
+
+    Handles streaming audio from browser microphone and returns
+    real-time transcription results.
+    """
+    session_id = str(uuid.uuid4())
+    logger.info(f"[Realtime {session_id[:8]}] New connection request")
+
+    # Accept connection
+    try:
+        await websocket.accept()
+        logger.info(f"[Realtime {session_id[:8]}] Connection accepted")
+    except Exception as e:
+        logger.error(f"[Realtime {session_id[:8]}] Failed to accept connection: {e}")
+        return
+
+    # Initialize session
+    audio_buffer = AudioBuffer(sample_rate=16000, max_duration=30.0)
+    transcription_service = get_realtime_service()
+
+    session_info = {
+        "session_id": session_id,
+        "connected_at": time.time(),
+        "audio_buffer": audio_buffer,
+        "config": {
+            "language": None,  # Auto-detect by default
+            "translate_to": None,
+            "min_chunk_duration": 0.15,  # Minimum 0.15s to capture single short words
+            "model_size": "tiny",  # Default to tiny (realtime mode)
+        },
+        "stats": {
+            "audio_chunks_received": 0,
+            "transcriptions_sent": 0,
+            "total_audio_duration": 0.0,
+        }
+    }
+
+    active_realtime_sessions[session_id] = session_info
+
+    # Send connection confirmation
+    try:
+        await websocket.send_json({
+            "type": "connected",
+            "session_id": session_id,
+            "timestamp": int(time.time() * 1000),
+            "config": {
+                "sample_rate": 16000,
+                "min_chunk_duration": session_info["config"]["min_chunk_duration"]
+            }
+        })
+    except Exception as e:
+        logger.error(f"[Realtime {session_id[:8]}] Failed to send confirmation: {e}")
+        cleanup_session(session_id)
+        return
+
+    # Transcription task
+    transcription_task = None
+
+    try:
+        # Start background transcription loop
+        transcription_task = asyncio.create_task(
+            transcription_loop(websocket, session_id, transcription_service, audio_buffer, session_info)
+        )
+
+        # ───────────────────────────────────────────────────────────────────
+        # MAIN MESSAGE LOOP
+        # ───────────────────────────────────────────────────────────────────
+        while True:
+            try:
+                message_data = await asyncio.wait_for(
+                    websocket.receive(),
+                    timeout=60.0  # 60s timeout
+                )
+
+                # ═══════════════════════════════════════════════════════════
+                # HANDLE AUDIO DATA (Binary)
+                # ═══════════════════════════════════════════════════════════
+                if 'bytes' in message_data and message_data['bytes'] is not None:
+                    await handle_audio_data(
+                        websocket,
+                        session_id,
+                        message_data['bytes'],
+                        audio_buffer,
+                        session_info
+                    )
+
+                # ═══════════════════════════════════════════════════════════
+                # HANDLE JSON MESSAGES (Config, Ping, etc.)
+                # ═══════════════════════════════════════════════════════════
+                elif 'text' in message_data and message_data['text'] is not None:
+                    await handle_text_message(
+                        websocket,
+                        session_id,
+                        message_data['text'],
+                        session_info
+                    )
+
+            except asyncio.TimeoutError:
+                # No message for 60s - send ping
+                try:
+                    await websocket.send_json({
+                        "type": "ping",
+                        "timestamp": int(time.time() * 1000)
+                    })
+                except:
+                    logger.warning(f"[Realtime {session_id[:8]}] Ping failed, closing")
+                    break
+
+            except WebSocketDisconnect:
+                logger.info(f"[Realtime {session_id[:8]}] Client disconnected")
+                break
+
+            except Exception as e:
+                logger.error(f"[Realtime {session_id[:8]}] Message handling error: {e}")
+                break
+
+    except Exception as e:
+        logger.error(f"[Realtime {session_id[:8]}] Fatal error: {e}", exc_info=True)
+
+    finally:
+        # Cancel transcription task
+        if transcription_task:
+            transcription_task.cancel()
+            try:
+                await transcription_task
+            except asyncio.CancelledError:
+                pass
+
+        # Cleanup
+        cleanup_session(session_id)
+        logger.info(f"[Realtime {session_id[:8]}] Session ended")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MESSAGE HANDLERS
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def handle_audio_data(
+    websocket: WebSocket,
+    session_id: str,
+    audio_bytes: bytes,
+    audio_buffer: AudioBuffer,
+    session_info: dict
+):
+    """Handle incoming audio data from browser"""
+    try:
+        # Convert bytes to Float32Array
+        # Browser sends Float32Array as raw bytes (little-endian)
+        num_samples = len(audio_bytes) // 4  # 4 bytes per float32
+        audio_array = np.frombuffer(audio_bytes, dtype=np.float32)
+
+        # Validate audio
+        if len(audio_array) == 0:
+            logger.warning(f"[Realtime {session_id[:8]}] Empty audio chunk received")
+            return
+
+        # Add to buffer
+        audio_buffer.append(audio_array)
+
+        # Update stats
+        session_info["stats"]["audio_chunks_received"] += 1
+        duration = len(audio_array) / 16000  # 16kHz sample rate
+        session_info["stats"]["total_audio_duration"] += duration
+
+        logger.debug(
+            f"[Realtime {session_id[:8]}] Audio chunk: {num_samples} samples "
+            f"({duration:.2f}s) | Buffer: {audio_buffer.get_duration():.2f}s"
+        )
+
+    except Exception as e:
+        logger.error(f"[Realtime {session_id[:8]}] Audio handling error: {e}")
+
+
+async def handle_text_message(
+    websocket: WebSocket,
+    session_id: str,
+    text_data: str,
+    session_info: dict
+):
+    """Handle JSON text messages (config, ping, etc.)"""
+    try:
+        message = json.loads(text_data)
+        message_type = message.get('type', 'unknown')
+
+        logger.debug(f"[Realtime {session_id[:8]}] JSON message: {message_type}")
+
+        # ───────────────────────────────────────────────────────────────────
+        # CONFIG - Update transcription settings
+        # ───────────────────────────────────────────────────────────────────
+        if message_type == 'config':
+            if 'language' in message:
+                session_info["config"]["language"] = message['language']
+            if 'translate_to' in message:
+                session_info["config"]["translate_to"] = message['translate_to']
+            if 'min_chunk_duration' in message:
+                session_info["config"]["min_chunk_duration"] = float(message['min_chunk_duration'])
+
+            # Handle model size change (hotswap between realtime and accurate)
+            if 'model_size' in message:
+                model_size = message['model_size']
+                try:
+                    transcription_service = get_realtime_service()
+                    transcription_service.switch_model(model_size)
+                    session_info["config"]["model_size"] = model_size
+                    logger.info(f"[Realtime {session_id[:8]}] Model switched to '{model_size}'")
+                except Exception as e:
+                    logger.error(f"[Realtime {session_id[:8]}] Model switch failed: {e}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Failed to switch model: {str(e)}"
+                    })
+                    return
+
+            logger.info(
+                f"[Realtime {session_id[:8]}] Config updated: {session_info['config']}"
+            )
+
+            await websocket.send_json({
+                "type": "config_updated",
+                "config": session_info["config"]
+            })
+
+        # ───────────────────────────────────────────────────────────────────
+        # PING - Heartbeat
+        # ───────────────────────────────────────────────────────────────────
+        elif message_type == 'ping':
+            await websocket.send_json({
+                "type": "pong",
+                "timestamp": int(time.time() * 1000),
+                "client_timestamp": message.get('timestamp')
+            })
+
+        # ───────────────────────────────────────────────────────────────────
+        # STATS - Get session statistics
+        # ───────────────────────────────────────────────────────────────────
+        elif message_type == 'get_stats':
+            uptime = time.time() - session_info["connected_at"]
+            stats = {
+                **session_info["stats"],
+                "uptime_seconds": uptime,
+                "buffer_duration": session_info["audio_buffer"].get_duration()
+            }
+            await websocket.send_json({
+                "type": "stats",
+                "stats": stats
+            })
+
+        else:
+            logger.debug(f"[Realtime {session_id[:8]}] Unknown message type: {message_type}")
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"[Realtime {session_id[:8]}] Invalid JSON: {e}")
+    except Exception as e:
+        logger.error(f"[Realtime {session_id[:8]}] Text handler error: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BACKGROUND TRANSCRIPTION LOOP
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def transcription_loop(
+    websocket: WebSocket,
+    session_id: str,
+    transcription_service,
+    audio_buffer: AudioBuffer,
+    session_info: dict
+):
+    """
+    Background task that periodically transcribes audio buffer.
+    Runs independently from audio ingestion.
+    """
+    logger.info(f"[Realtime {session_id[:8]}] Transcription loop started")
+
+    try:
+        last_transcription_time = time.time()
+        max_chunk_duration = 10.0  # Maximum seconds before forcing transcription
+
+        while True:
+            # Check very frequently for speech end (ultra-responsive)
+            await asyncio.sleep(0.1)  # Check every 100ms
+
+            # Get configured minimum duration
+            min_duration = session_info["config"]["min_chunk_duration"]
+
+            # Check if enough audio accumulated
+            current_duration = audio_buffer.get_duration()
+            if current_duration < min_duration:
+                continue
+
+            # Time since last transcription
+            time_since_last = time.time() - last_transcription_time
+
+            # Trigger transcription if:
+            # 1. Speech has ended (user stopped talking)
+            # 2. OR it's been too long since last transcription (prevent buffering too much)
+            should_transcribe = (
+                audio_buffer.has_speech_ended() or
+                time_since_last >= max_chunk_duration
+            )
+
+            if not should_transcribe:
+                continue
+
+            # Get NEW audio for transcription (only untranscribed audio)
+            audio = audio_buffer.get_audio_for_transcription()
+            if audio is None:
+                continue
+
+            # Transcribe
+            language = session_info["config"]["language"]
+            segments = await transcription_service.transcribe_chunk(audio, language=language)
+
+            # Update last transcription time
+            last_transcription_time = time.time()
+
+            # Send results
+            for segment in segments:
+                try:
+                    await websocket.send_json({
+                        "type": "caption",
+                        "text": segment.text,
+                        "language": segment.language,
+                        "start": segment.start,
+                        "end": segment.end,
+                        "is_final": segment.is_final,
+                        "timestamp": int(time.time() * 1000)
+                    })
+
+                    session_info["stats"]["transcriptions_sent"] += 1
+
+                    logger.info(
+                        f"[Realtime {session_id[:8]}] Caption sent: \"{segment.text}\" ({segment.language})"
+                    )
+
+                    # Optional: Translation
+                    translate_to = session_info["config"]["translate_to"]
+                    if translate_to and translate_to != segment.language:
+                        # TODO: Integrate with translation service
+                        # translation = await translate_text(segment.text, translate_to)
+                        # await websocket.send_json({
+                        #     "type": "translation",
+                        #     "text": translation,
+                        #     "language": translate_to
+                        # })
+                        pass
+
+                except Exception as e:
+                    logger.error(f"[Realtime {session_id[:8]}] Failed to send caption: {e}")
+
+            # Mark audio as transcribed and reset speech detection state
+            audio_buffer.mark_transcribed(len(audio))
+            audio_buffer.reset_speech_state()
+
+    except asyncio.CancelledError:
+        logger.info(f"[Realtime {session_id[:8]}] Transcription loop cancelled")
+    except Exception as e:
+        logger.error(f"[Realtime {session_id[:8]}] Transcription loop error: {e}", exc_info=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SESSION CLEANUP
+# ═══════════════════════════════════════════════════════════════════════════
+
+def cleanup_session(session_id: str):
+    """Clean up session resources"""
+    if session_id in active_realtime_sessions:
+        session_info = active_realtime_sessions[session_id]
+        uptime = time.time() - session_info["connected_at"]
+
+        logger.info(
+            f"[Realtime {session_id[:8]}] Session stats: "
+            f"uptime={uptime:.1f}s, "
+            f"audio_chunks={session_info['stats']['audio_chunks_received']}, "
+            f"transcriptions={session_info['stats']['transcriptions_sent']}, "
+            f"total_audio={session_info['stats']['total_audio_duration']:.1f}s"
+        )
+
+        # Clear buffer
+        session_info["audio_buffer"].clear()
+
+        del active_realtime_sessions[session_id]
+
+    logger.info(f"[Realtime] Active sessions: {len(active_realtime_sessions)}")

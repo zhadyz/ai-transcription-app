@@ -40,15 +40,15 @@ export default defineConfig({
   // ═══════════════════════════════════════════════════════════════════════════
   server: {
     host: '0.0.0.0',      // Expose on network (mobile access via QR code)
-    port: 5173,           // Default port
+    port: 6167,           // Custom port (avoiding conflict with spud on 5173)
     strictPort: true,     // Fail if port already in use
     open: false,          // Don't auto-open (startup script handles this)
     cors: true,           // Enable CORS for backend communication
-    
+
     // Hot Module Replacement
     hmr: {
       overlay: true,      // Show errors as overlay
-      clientPort: 5173,   // HMR client port
+      clientPort: 6167,   // HMR client port
     },
 
     // Proxy backend API calls (optional - for production builds)

@@ -43,15 +43,26 @@ class Settings(BaseSettings):
     # Translation Service
     LIBRETRANSLATE_URL: str = "http://localhost:5000"
     
-    # API Authentication
+    # API Authentication (Legacy - Simple API Keys)
     REQUIRE_AUTH: bool = False
     ALLOWED_API_KEYS: list[str] = [
         "dev-key-12345",      # Development key
         "prod-key-67890",     # Production key
         "mobile-key-abcde"    # Mobile client key
     ]
-    
+
+    # JWT Authentication (New System)
+    JWT_SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION_USE_SECURE_RANDOM_KEY"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # Database Configuration
+    DATABASE_URL: str = "sqlite:///./db/auth.db"  # Override with PostgreSQL in production
+
     # Security Note: In production, load keys from environment variables:
+    # export JWT_SECRET_KEY='your-very-secure-secret-key'
+    # export DATABASE_URL='postgresql://user:pass@localhost/dbname'
     # export ALLOWED_API_KEYS='["key1","key2","key3"]'
     
     # ═══════════════════════════════════════════════════════════════════════
