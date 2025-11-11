@@ -9,7 +9,7 @@
  * - Professional, minimal appearance
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveCapture } from '../../contexts/LiveCaptureContext';
 import { LiveCaptureButton } from './LiveCaptureButton';
@@ -29,6 +29,24 @@ export const LiveCapturePanel: React.FC = () => {
   } = useLiveCapture();
 
   const [showSettings, setShowSettings] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close settings
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showSettings && panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        setShowSettings(false);
+      }
+    };
+
+    if (showSettings) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSettings]);
 
   const handleToggle = async () => {
     if (isActive) {
@@ -59,6 +77,7 @@ export const LiveCapturePanel: React.FC = () => {
     <>
       {/* STYGIAN Live Capture Panel - Bottom Left */}
       <motion.div
+        ref={panelRef}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="fixed bottom-6 left-6 z-50"
@@ -114,224 +133,119 @@ export const LiveCapturePanel: React.FC = () => {
             )}
           </div>
 
-          {/* Settings Panel - Slides Down with Animation */}
+          {/* Settings Panel - Minimalist STYGIAN Design */}
           <AnimatePresence>
             {showSettings && (
               <motion.div
-                initial={{ height: 0, opacity: 0, y: -10 }}
-                animate={{ height: 'auto', opacity: 1, y: 0 }}
-                exit={{ height: 0, opacity: 0, y: -10 }}
-                transition={{ duration: 0.12, ease: [0.4, 0, 0.2, 1] }}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
                 className="overflow-hidden"
               >
-                <div className="px-4 pb-4 pt-2 space-y-4" style={{ borderTop: "1px solid rgba(180, 120, 30, 0.25)" }}>
-                  {/* Transcription Mode - Realtime vs Accurate */}
-                  <div>
-                    <label className="text-amber-200/60 text-xs font-semibold mb-2 block uppercase tracking-wider">
-                      Mode
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <motion.button
-                        onClick={() => updateSettings({ transcriptionMode: 'realtime' })}
-                        className={`
-                          py-3 rounded-lg font-medium transition-all duration-200
-                          ${settings.transcriptionMode === 'realtime'
-                            ? 'bg-gradient-to-r from-green-600 to-green-500 text-white shadow-lg shadow-green-500/30'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'
-                          }
-                        `}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm">⚡ Realtime</span>
-                          <span className="text-xs opacity-70 mt-0.5">Fast & Responsive</span>
-                        </div>
-                      </motion.button>
-                      <motion.button
-                        onClick={() => updateSettings({ transcriptionMode: 'accurate' })}
-                        className={`
-                          py-3 rounded-lg font-medium transition-all duration-200
-                          ${settings.transcriptionMode === 'accurate'
-                            ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/30'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'
-                          }
-                        `}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm">🎯 Accurate</span>
-                          <span className="text-xs opacity-70 mt-0.5">Higher Precision</span>
-                        </div>
-                      </motion.button>
-                    </div>
-                  </div>
-
-                  {/* Audio Source - Microphone vs System Audio */}
-                  <div>
-                    <label className="text-amber-200/60 text-xs font-semibold mb-2 block uppercase tracking-wider">
-                      Audio Source
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <motion.button
+                <div className="px-3 pb-3 pt-2 space-y-2.5" style={{ borderTop: "1px solid rgba(180, 120, 30, 0.2)" }}>
+                  {/* Audio Source */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-amber-200/50 font-medium">Source</span>
+                    <div className="flex gap-1.5">
+                      <button
                         onClick={() => updateSettings({ audioSource: 'microphone' })}
-                        className={`
-                          py-3 rounded-lg font-medium transition-all duration-200
-                          ${settings.audioSource === 'microphone'
-                            ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'
-                          }
-                        `}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                          settings.audioSource === 'microphone'
+                            ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                            : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                        }`}
                       >
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm">🎤 Microphone</span>
-                          <span className="text-xs opacity-70 mt-0.5">Your Voice</span>
-                        </div>
-                      </motion.button>
-                      <motion.button
+                        🎤 Mic
+                      </button>
+                      <button
                         onClick={() => updateSettings({ audioSource: 'system' })}
-                        className={`
-                          py-3 rounded-lg font-medium transition-all duration-200
-                          ${settings.audioSource === 'system'
-                            ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/30'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'
-                          }
-                        `}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                          settings.audioSource === 'system'
+                            ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                            : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                        }`}
                       >
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm">🔊 System Audio</span>
-                          <span className="text-xs opacity-70 mt-0.5">Computer Sounds</span>
-                        </div>
-                      </motion.button>
-                    </div>
-                  </div>
-
-                  {/* Position */}
-                  <div>
-                    <label className="text-amber-200/60 text-xs font-semibold mb-2 block uppercase tracking-wider">
-                      Caption Position
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['top', 'center', 'bottom'] as const).map((pos) => (
-                        <motion.button
-                          key={pos}
-                          onClick={() => updateSettings({ position: pos })}
-                          className={`
-                            py-2 rounded-lg text-sm font-medium transition-all duration-200
-                            ${settings.position === pos
-                              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30'
-                              : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'
-                            }
-                          `}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          {pos.charAt(0).toUpperCase() + pos.slice(1)}
-                        </motion.button>
-                      ))}
+                        🔊 System
+                      </button>
                     </div>
                   </div>
 
                   {/* Font Size */}
-                  <div>
-                    <label className="text-amber-200/60 text-xs font-semibold mb-2 block uppercase tracking-wider">
-                      Font Size
-                    </label>
-                    <div className="grid grid-cols-4 gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-amber-200/50 font-medium">Size</span>
+                    <div className="flex gap-1.5">
                       {(['small', 'medium', 'large', 'xlarge'] as const).map((size) => (
-                        <motion.button
+                        <button
                           key={size}
                           onClick={() => updateSettings({ fontSize: size })}
-                          className={`
-                            py-2 rounded-lg text-sm font-medium transition-all duration-200
-                            ${settings.fontSize === size
-                              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30'
-                              : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'
-                            }
-                          `}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                            settings.fontSize === size
+                              ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                              : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                          }`}
                         >
-                          {size === 'xlarge' ? 'XL' : size.charAt(0).toUpperCase()}
-                        </motion.button>
+                          {size === 'xlarge' ? 'XL' : size === 'medium' ? 'M' : size === 'large' ? 'L' : 'S'}
+                        </button>
                       ))}
                     </div>
                   </div>
 
                   {/* Language */}
-                  <div>
-                    <label className="text-amber-200/60 text-xs font-semibold mb-2 block uppercase tracking-wider">
-                      Language
-                    </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-amber-200/50 font-medium">Language</span>
                     <select
                       value={settings.language || 'auto'}
                       onChange={(e) =>
                         updateSettings({ language: e.target.value === 'auto' ? null : e.target.value })
                       }
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                        text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50
-                        focus:border-blue-500/50 transition-all"
+                      className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-white text-xs
+                        focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all"
                     >
-                      <option value="auto" className="bg-gray-900">Auto-detect</option>
-                      <option value="en" className="bg-gray-900">English</option>
-                      <option value="es" className="bg-gray-900">Spanish</option>
-                      <option value="fr" className="bg-gray-900">French</option>
-                      <option value="de" className="bg-gray-900">German</option>
-                      <option value="it" className="bg-gray-900">Italian</option>
-                      <option value="pt" className="bg-gray-900">Portuguese</option>
-                      <option value="zh" className="bg-gray-900">Chinese</option>
-                      <option value="ja" className="bg-gray-900">Japanese</option>
-                      <option value="ko" className="bg-gray-900">Korean</option>
-                      <option value="ar" className="bg-gray-900">Arabic</option>
-                      <option value="hi" className="bg-gray-900">Hindi</option>
+                      <option value="auto" className="bg-gray-900">Auto</option>
+                      <option value="en" className="bg-gray-900">EN</option>
+                      <option value="es" className="bg-gray-900">ES</option>
+                      <option value="fr" className="bg-gray-900">FR</option>
+                      <option value="de" className="bg-gray-900">DE</option>
+                      <option value="it" className="bg-gray-900">IT</option>
+                      <option value="pt" className="bg-gray-900">PT</option>
+                      <option value="zh" className="bg-gray-900">ZH</option>
+                      <option value="ja" className="bg-gray-900">JA</option>
                     </select>
                   </div>
 
-                  {/* Translation Toggle */}
-                  <div>
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={settings.showTranslation}
-                        onChange={(e) => updateSettings({ showTranslation: e.target.checked })}
-                        className="w-4 h-4 text-blue-500 bg-white/5 border-white/10 rounded
-                          focus:ring-2 focus:ring-blue-500/50 transition-all cursor-pointer"
-                      />
-                      <span className="text-sm font-medium text-amber-200/60 group-hover:text-amber-200 transition-colors">
-                        Show Translation
-                      </span>
-                    </label>
-
-                    {settings.showTranslation && (
-                      <motion.select
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        value={settings.translateTo || ''}
-                        onChange={(e) =>
-                          updateSettings({ translateTo: e.target.value || null })
-                        }
-                        className="w-full mt-2 px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                          text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50
-                          focus:border-blue-500/50 transition-all"
-                      >
-                        <option value="" className="bg-gray-900">Select language...</option>
-                        <option value="en" className="bg-gray-900">English</option>
-                        <option value="es" className="bg-gray-900">Spanish</option>
-                        <option value="fr" className="bg-gray-900">French</option>
-                        <option value="de" className="bg-gray-900">German</option>
-                        <option value="it" className="bg-gray-900">Italian</option>
-                        <option value="pt" className="bg-gray-900">Portuguese</option>
-                        <option value="zh" className="bg-gray-900">Chinese</option>
-                        <option value="ja" className="bg-gray-900">Japanese</option>
-                        <option value="ko" className="bg-gray-900">Korean</option>
-                      </motion.select>
-                    )}
+                  {/* Translation */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-amber-200/50 font-medium">Translate</span>
+                    <div className="flex items-center gap-2">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.showTranslation}
+                          onChange={(e) => updateSettings({ showTranslation: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-white/10 peer-focus:ring-1 peer-focus:ring-amber-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600/60"></div>
+                      </label>
+                      {settings.showTranslation && (
+                        <select
+                          value={settings.translateTo || ''}
+                          onChange={(e) => updateSettings({ translateTo: e.target.value || null })}
+                          className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-white text-xs
+                            focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all"
+                        >
+                          <option value="" className="bg-gray-900">Lang</option>
+                          <option value="en" className="bg-gray-900">EN</option>
+                          <option value="es" className="bg-gray-900">ES</option>
+                          <option value="fr" className="bg-gray-900">FR</option>
+                          <option value="de" className="bg-gray-900">DE</option>
+                          <option value="it" className="bg-gray-900">IT</option>
+                          <option value="pt" className="bg-gray-900">PT</option>
+                          <option value="zh" className="bg-gray-900">ZH</option>
+                          <option value="ja" className="bg-gray-900">JA</option>
+                        </select>
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>

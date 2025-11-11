@@ -341,15 +341,52 @@ export default function FileUpload() {
               </motion.div>
             </div>
           ) : (
-            <FileUploadZone
-              selectedFile={fileUpload.selectedFile}
-              onFileSelect={fileUpload.handleFileSelect}
-              onRemoveFile={() => {
-                fileUpload.setSelectedFile(null)
-                transcription.reset()
+            <>
+              {/* STYGIAN Header */}
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="text-center mb-10"
+              >
+                <h1
+                  className="text-2xl font-light mb-2"
+                  style={{
+                    background: "linear-gradient(135deg, #c8881e 0%, #d4a044 50%, #b87a1a 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    textShadow: "0 0 30px rgba(200, 136, 30, 0.2)",
+                    letterSpacing: "0.15em"
+                  }}
+                >
+                  AUDIO TRANSCRIPTION
+                </h1>
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em]" style={{ color: "rgba(200, 140, 35, 0.4)" }}>
+                  Powered by{' '}
+                  <span
+                    style={{
+                      background: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #7c3aed 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      backgroundClip: "text"
+                    }}
+                  >
+                    Onyx
+                  </span>
+                </p>
+              </motion.div>
+
+              <FileUploadZone
+                selectedFile={fileUpload.selectedFile}
+                onFileSelect={fileUpload.handleFileSelect}
+                onRemoveFile={() => {
+                  fileUpload.setSelectedFile(null)
+                  transcription.reset()
               }}
               disabled={transcription.isUploading || !!transcription.taskId}
             />
+            </>
           )}
 
           <AnimatePresence>

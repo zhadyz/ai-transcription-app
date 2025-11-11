@@ -170,22 +170,6 @@ export default function App() {
                     <BackgroundMedia />
                     <DeviceIndicator />
 
-                    {/* Test Caption Button - DEBUG ONLY */}
-                    <button
-                      onClick={async () => {
-                        console.log('[Test] Sending test caption...');
-                        try {
-                          const result = await invoke('test_caption');
-                          console.log('[Test] Result:', result);
-                        } catch (err) {
-                          console.error('[Test] Error:', err);
-                        }
-                      }}
-                      className="fixed top-16 right-6 z-50 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold shadow-lg"
-                    >
-                      Test Caption
-                    </button>
-
                     <LiveCapturePanel />
                     <LiveCaptionsDisplay />
 

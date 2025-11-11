@@ -367,34 +367,6 @@ async fn stop_capture(_app_handle: AppHandle, state: State<'_, AppState>) -> Res
     Ok("Capture stopped".to_string())
 }
 
-#[tauri::command]
-async fn test_caption(app_handle: AppHandle) -> Result<String, String> {
-    println!("🧪 Sending test caption...");
-
-    let test_caption = CaptionPayload {
-        text: "This is a test caption!".to_string(),
-        language: "en".to_string(),
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64,
-    };
-
-    // Emit to main window
-    println!("🧪 Emitting test caption to main window...");
-    match app_handle.emit("caption", &test_caption) {
-        Ok(_) => {
-            println!("✓ Test caption emitted successfully to main window");
-            println!("   Event: 'caption', Payload: {:?}", test_caption.text);
-        }
-        Err(e) => {
-            eprintln!("❌ Failed to emit caption: {}", e);
-            return Err(format!("Failed to emit caption: {}", e));
-        }
-    }
-
-    Ok("Test caption sent".to_string())
-}
 
 fn capture_system_audio(state: AppState, device_type: String) {
     let is_microphone = device_type == "microphone";
@@ -689,7 +661,7 @@ fn main() {
         })
         .manage(app_state)
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![start_capture, stop_capture, test_caption])
+        .invoke_handler(tauri::generate_handler![start_capture, stop_capture])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -86,12 +86,12 @@ class SileroVAD:
     the speech detection threshold dynamically using rolling statistics.
     """
 
-    def __init__(self, adaptive_threshold: bool = True):
+    def __init__(self, adaptive_threshold: bool = False):
         """
         Initialize Silero VAD model with optional adaptive threshold.
 
         Args:
-            adaptive_threshold: Enable auto-tuning based on noise floor
+            adaptive_threshold: Enable auto-tuning based on noise floor (EXPERIMENTAL, disabled by default)
         """
         if not SILERO_AVAILABLE:
             raise RuntimeError("Silero VAD not available - install with: pip install silero-vad")
@@ -102,16 +102,16 @@ class SileroVAD:
             self.sample_rate = 16000  # Silero VAD requires 16kHz
             self.window_size = 512  # Silero requires exactly 512 samples (32ms at 16kHz)
 
-            # Adaptive threshold settings
+            # Adaptive threshold settings (EXPERIMENTAL - disabled by default)
             self.adaptive_threshold = adaptive_threshold
             self.noise_floor_history = deque(maxlen=20)  # Track last 20 chunks
             self.base_threshold = 0.1  # Default threshold
             self.current_threshold = self.base_threshold
 
             if self.adaptive_threshold:
-                logger.info("✓ Silero VAD initialized with AUTO-TUNING enabled")
+                logger.info("✓ Silero VAD initialized with AUTO-TUNING enabled (EXPERIMENTAL)")
             else:
-                logger.info("✓ Silero VAD initialized successfully")
+                logger.info("✓ Silero VAD initialized (fixed threshold: 0.1)")
         except Exception as e:
             logger.error(f"Failed to initialize Silero VAD: {e}")
             raise
