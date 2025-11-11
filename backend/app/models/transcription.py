@@ -124,6 +124,8 @@ class TranscriptionRequest(BaseModel):
     language: TranscriptionLanguage = TranscriptionLanguage.AUTO
     quality: TranscriptionQuality = TranscriptionQuality.BALANCED
     export_format: ExportFormat = ExportFormat.SRT
+    translate_to: Optional[str] = None  # Target language for translation (e.g., "es", "fr", "de")
+    show_translation: bool = False  # Whether to include translations in result
 
 
 class TranscriptionProgress(BaseModel):
@@ -140,6 +142,7 @@ class Segment(BaseModel):
     start: float  # Start time in seconds
     end: float  # End time in seconds
     text: str
+    translation: Optional[str] = None  # Translated text (if translation is enabled)
 
 
 class TranscriptionResult(BaseModel):

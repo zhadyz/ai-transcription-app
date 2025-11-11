@@ -39,10 +39,10 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
-    
-    # Translation Service
-    LIBRETRANSLATE_URL: str = "http://localhost:5000"
-    
+
+    # NLLB Translation Service
+    NLLB_MODEL_SIZE: Literal["600M", "1.3B", "3.3B"] = "1.3B"  # Model size for translation
+
     # API Authentication (Legacy - Simple API Keys)
     REQUIRE_AUTH: bool = False
     ALLOWED_API_KEYS: list[str] = [

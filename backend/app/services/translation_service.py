@@ -101,8 +101,16 @@ class NLLBTranslationService:
 
 _translation_service: Optional[NLLBTranslationService] = None
 
-def get_translation_service(model_size: str = "1.3B") -> NLLBTranslationService:
+def get_translation_service(model_size: Optional[str] = None) -> NLLBTranslationService:
+    """
+    Get singleton translation service instance.
+
+    Args:
+        model_size: Optional model size override. If not provided, uses config setting.
+    """
     global _translation_service
     if _translation_service is None:
-        _translation_service = NLLBTranslationService(model_size=model_size)
+        from app.config import settings
+        size = model_size or settings.NLLB_MODEL_SIZE
+        _translation_service = NLLBTranslationService(model_size=size)
     return _translation_service

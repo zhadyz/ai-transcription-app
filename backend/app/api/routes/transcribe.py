@@ -266,13 +266,59 @@ async def process_transcription(
             await update_progress(
                 task_id, "processing", 85.0, "Transcription complete", 5, session_id
             )
-            
+
             # ═══════════════════════════════════════════════════════════════
-            # STEP 3: EXPORT (85-95%)
+            # STEP 2.5: TRANSLATE (OPTIONAL, 85-90%)
+            # ═══════════════════════════════════════════════════════════════
+            if settings_param.show_translation and settings_param.translate_to:
+                logger.info(f"🌐 Translating to {settings_param.translate_to}...")
+                await update_progress(
+                    task_id, "processing", 85.0,
+                    f"Translating to {settings_param.translate_to.upper()}...",
+                    3, session_id
+                )
+
+                try:
+                    from app.services.translation_service import get_translation_service
+                    translation_service = get_translation_service()
+
+                    # Translate each segment
+                    for i, segment in enumerate(segments):
+                        translation = await translation_service.translate(
+                            text=segment.text,
+                            source_lang=detected_lang,
+                            target_lang=settings_param.translate_to
+                        )
+
+                        if translation:
+                            segment.translation = translation
+
+                        # Update progress
+                        if (i + 1) % 10 == 0 or i == len(segments) - 1:
+                            translation_progress = 85.0 + (5.0 * (i + 1) / len(segments))
+                            await update_progress(
+                                task_id, "processing", translation_progress,
+                                f"Translating... ({i + 1}/{len(segments)})",
+                                2, session_id
+                            )
+
+                    logger.info(f"✅ Translation complete: {len(segments)} segments translated")
+
+                except Exception as e:
+                    logger.error(f"Translation failed: {e}", exc_info=True)
+                    # Continue without translations rather than failing the whole task
+
+                await update_progress(
+                    task_id, "processing", 90.0, "Translation complete", 2, session_id
+                )
+
+            # ═══════════════════════════════════════════════════════════════
+            # STEP 3: EXPORT (90-95%)
             # ═══════════════════════════════════════════════════════════════
             logger.info(f"📝 Step 3/4: Exporting {settings_param.export_format.value.upper()}")
+            progress_for_export = 90.0 if settings_param.show_translation else 85.0
             await update_progress(
-                task_id, "processing", 85.0,
+                task_id, "processing", progress_for_export,
                 f"Exporting {settings_param.export_format.value.upper()}...",
                 3, session_id
             )
