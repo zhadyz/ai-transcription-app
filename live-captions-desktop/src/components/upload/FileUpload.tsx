@@ -14,6 +14,7 @@ import { TranscriptionProgress } from '@/components/transcription/TranscriptionP
 import { TranscriptionResult } from '@/components/transcription/TranscriptionResult'
 import { TranslationPanel } from '@/components/transcription/TranslationPanel'
 import QRCodeDisplay from './QRCodeDisplay'
+import { Footer } from '../layout/Footer'
 import { filter } from 'rxjs/operators'
 import { BACKEND_URL } from '@/config/backend'
 
@@ -501,6 +502,7 @@ export default function FileUpload() {
           )}
         </motion.div>
       </div>
+      <Footer />
     </div>
   )
 }

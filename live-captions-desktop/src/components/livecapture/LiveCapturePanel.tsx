@@ -214,6 +214,33 @@ export const LiveCapturePanel: React.FC = () => {
                     </select>
                   </div>
 
+                  {/* Quality */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-amber-200/50 font-medium">Quality</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => updateSettings({ transcriptionMode: 'realtime' })}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                          settings.transcriptionMode === 'realtime'
+                            ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                            : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        Fast
+                      </button>
+                      <button
+                        onClick={() => updateSettings({ transcriptionMode: 'accurate' })}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                          settings.transcriptionMode === 'accurate'
+                            ? 'bg-amber-600/40 text-amber-100 border border-amber-500/50'
+                            : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        Accurate
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Translation */}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-amber-200/50 font-medium">Translate</span>
