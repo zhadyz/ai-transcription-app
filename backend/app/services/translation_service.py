@@ -50,11 +50,13 @@ class NLLBTranslationService:
     """NLLB-200 translation service for real-time caption translation."""
 
     def __init__(self, model_size: str = "1.3B"):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Force CPU for NLLB due to CUDA compute capability mismatch
+        # Whisper uses CUDA, but NLLB has compatibility issues with this GPU
+        self.device = "cpu"
         model_name = f"facebook/nllb-200-distilled-{model_size}"
 
-        logger.info(f"Loading NLLB-200 translation model ({model_size})...")
-        
+        logger.info(f"Loading NLLB-200 translation model ({model_size}) on {self.device}...")
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             cache_dir="./models",
@@ -63,7 +65,7 @@ class NLLBTranslationService:
         self.model = AutoModelForSeq2SeqLM.from_pretrained(
             model_name,
             cache_dir="./models",
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            torch_dtype=torch.float32,  # CPU requires float32
             use_safetensors=True
         ).to(self.device)
 
@@ -89,7 +91,7 @@ class NLLBTranslationService:
             with torch.no_grad():
                 translated = self.model.generate(
                     **inputs,
-                    forced_bos_token_id=self.tokenizer.lang_code_to_id[tgt_code],
+                    forced_bos_token_id=self.tokenizer.convert_tokens_to_ids(tgt_code),
                     max_length=512,
                     num_beams=4,
                     early_stopping=True

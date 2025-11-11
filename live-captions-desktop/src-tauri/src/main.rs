@@ -501,11 +501,18 @@ async fn start_capture(
     };
 
     // Store Discord webhook
+    println!("[DEBUG] Discord webhook parameter: {:?}", discord_webhook);
     if let Some(webhook_url) = &discord_webhook {
-        *state.discord_webhook.lock().unwrap() = Some(webhook_url.clone());
-        println!("✓ Discord webhook configured");
+        if !webhook_url.is_empty() {
+            *state.discord_webhook.lock().unwrap() = Some(webhook_url.clone());
+            println!("✓ Discord webhook configured: {}", webhook_url);
+        } else {
+            *state.discord_webhook.lock().unwrap() = None;
+            println!("⚠ Discord webhook is empty, not configured");
+        }
     } else {
         *state.discord_webhook.lock().unwrap() = None;
+        println!("⚠ Discord webhook is None, not configured");
     }
 
     // Start WebSocket connection
@@ -609,7 +616,10 @@ async fn start_capture(
                                         }
 
                                         // POST to Discord webhook
-                                        if let Some(webhook_url) = discord_webhook_clone.lock().unwrap().as_ref() {
+                                        let webhook_check = discord_webhook_clone.lock().unwrap().clone();
+                                        println!("[DEBUG] Checking Discord webhook: {:?}", webhook_check);
+                                        if let Some(webhook_url) = webhook_check {
+                                            println!("[DEBUG] Discord webhook found, posting caption...");
                                             let client = reqwest::Client::new();
                                             let discord_payload = serde_json::json!({
                                                 "content": &caption.text
@@ -617,15 +627,18 @@ async fn start_capture(
 
                                             let webhook_url_clone = webhook_url.clone();
                                             tokio::spawn(async move {
+                                                println!("[DEBUG] Sending POST to Discord webhook...");
                                                 match client.post(&webhook_url_clone)
                                                     .json(&discord_payload)
                                                     .send()
                                                     .await
                                                 {
-                                                    Ok(_) => println!("✓ Posted caption to Discord"),
+                                                    Ok(resp) => println!("✓ Posted caption to Discord (status: {})", resp.status()),
                                                     Err(e) => eprintln!("⚠ Failed to post to Discord: {}", e),
                                                 }
                                             });
+                                        } else {
+                                            println!("[DEBUG] No Discord webhook configured");
                                         }
 
                                         // Emit to the OVERLAY window

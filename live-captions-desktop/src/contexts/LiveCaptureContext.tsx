@@ -129,7 +129,7 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
       setIsActive(false);
       setIsConnected(false);
     }
-  }, [isActive, settings.audioSource]);
+  }, [isActive, settings]);
 
   /**
    * Stop live capture - calls Rust backend
