@@ -10,7 +10,7 @@
 export const Footer = () => {
   return (
     <footer role="contentinfo" className="mt-auto border-t border-white/10">
-      <div className="max-w-6xl mx-auto px-6 py-8 ml-48">
+      <div className="max-w-6xl mx-auto px-6 py-3 ml-80">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-sm">
           <div className="flex items-center gap-2 text-gray-400">
             <img src="/favicon.ico" alt="OnyxLab Logo" className="w-5 h-5" />
