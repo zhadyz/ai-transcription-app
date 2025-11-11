@@ -1,20 +1,38 @@
 /**
  * Desktop footer component
- * 
+ *
  * Features:
  * - GitHub and LinkedIn links
  * - Terms and Privacy links
  * - Copyright notice
  * - Responsive layout
  */
+import faviconIcon from '../../assets/favicon.ico'
+
 export const Footer = () => {
   return (
     <footer role="contentinfo" className="mt-auto border-t border-white/10">
       <div className="max-w-6xl mx-auto px-6 py-3 ml-80">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-sm">
-          <div className="flex items-center gap-2 text-gray-400">
-            <img src="/favicon.ico" alt="OnyxLab Logo" className="w-5 h-5" />
-            <span>© {new Date().getFullYear()} Onyxlab. All rights reserved.</span>
+          <div className="flex items-center gap-2">
+            <img src={faviconIcon} alt="OnyxLab Logo" className="w-5 h-5" />
+            <span
+              className="text-[10px] font-medium uppercase tracking-[0.2em]"
+              style={{ color: "rgba(200, 140, 35, 0.4)" }}
+            >
+              © {new Date().getFullYear()}{' '}
+              <span
+                style={{
+                  background: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #7c3aed 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text"
+                }}
+              >
+                Onyxlab
+              </span>
+              . All rights reserved.
+            </span>
           </div>
 
           <div className="flex items-center gap-6">
