@@ -7,12 +7,23 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::process::Command;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State};
+use std::fs::{self, File, OpenOptions};
+use std::io::{Write, BufWriter};
+use std::path::PathBuf;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri::tray::TrayIconBuilder;
 use tokio::sync::{mpsc, Mutex as TokioMutex};
 use tokio::time::sleep;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
+use chrono::Local;
+
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HWND, COLORREF};
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::*;
+#[cfg(target_os = "windows")]
+use windows::Win32::Graphics::Dwm::*;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct CaptionPayload {
@@ -31,6 +42,233 @@ struct StatusPayload {
 struct AppState {
     is_capturing: Arc<Mutex<bool>>,
     ws_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<f32>>>>>,
+    log_file: Arc<Mutex<Option<BufWriter<File>>>>,
+    log_dir: Arc<Mutex<PathBuf>>,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OVERLAY WINDOW - Transparent Click-Through Setup (Windows)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Configure window for true transparency and click-through on Windows
+#[cfg(target_os = "windows")]
+fn setup_overlay_transparency(window: &WebviewWindow) {
+    use std::mem;
+
+    // CRITICAL: Tell Tauri to ignore all mouse events (click-through)
+    // This is REQUIRED in Tauri v2 - without this, Windows API calls won't work
+    if let Err(e) = window.set_ignore_cursor_events(true) {
+        eprintln!("⚠ Failed to set ignore cursor events: {}", e);
+    } else {
+        println!("✓ Tauri cursor events disabled (click-through enabled)");
+    }
+
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            let hwnd = HWND(hwnd.0 as isize);
+
+            // Get current extended window style
+            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+
+            // Add transparent and layered styles for click-through
+            let new_ex_style = ex_style |
+                WS_EX_TRANSPARENT.0 as i32 |  // Click-through
+                WS_EX_LAYERED.0 as i32 |      // Layered window for transparency
+                WS_EX_NOACTIVATE.0 as i32 |   // Don't steal focus
+                WS_EX_TOOLWINDOW.0 as i32;    // Tool window (never gets focus/taskbar)
+
+            SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex_style);
+
+            // CRITICAL: Activate the layered window with full alpha transparency
+            // This is THE magic sauce - makes the entire window transparent except content
+            let _ = SetLayeredWindowAttributes(
+                hwnd,
+                COLORREF(0),           // Transparency color key (black, but we use alpha instead)
+                255,                   // Alpha: 255 = fully opaque for CONTENT
+                LWA_ALPHA,            // Use per-window alpha transparency
+            );
+
+            // Also remove WS_VISIBLE from base styles when hidden to prevent activation
+            let style = GetWindowLongW(hwnd, GWL_STYLE);
+            let new_style = style & !(WS_BORDER.0 as i32 | WS_THICKFRAME.0 as i32 | WS_DLGFRAME.0 as i32 | WS_CAPTION.0 as i32);
+            SetWindowLongW(hwnd, GWL_STYLE, new_style);
+
+            // Disable DWM rendering attributes (removes shadows/borders)
+            // DWMNCRP_DISABLED = 1
+            let no_border: i32 = 1;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_NCRENDERING_POLICY,
+                &no_border as *const _ as *const _,
+                mem::size_of::<i32>() as u32,
+            );
+
+            // Disable window borders completely
+            let no_border_attr: i32 = 0;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &no_border_attr as *const _ as *const _,
+                mem::size_of::<i32>() as u32,
+            );
+
+            // Force window update to apply all style changes immediately
+            // Use SWP_NOACTIVATE to prevent activation during position update
+            let _ = SetWindowPos(
+                hwnd,
+                HWND::default(),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE,
+            );
+
+            println!("✓ Overlay window configured: transparent + click-through + borderless");
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn setup_overlay_transparency(_window: &WebviewWindow) {
+    println!("⚠ Overlay transparency is only fully supported on Windows");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRANSCRIPTION LOGGING - Auto-Save with File Rotation
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Get or create the transcription logs directory
+fn get_transcription_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    let log_dir = app_data_dir.join("transcriptions");
+
+    if !log_dir.exists() {
+        fs::create_dir_all(&log_dir)
+            .map_err(|e| format!("Failed to create transcription dir: {}", e))?;
+        println!("📁 Created transcription directory: {:?}", log_dir);
+    }
+
+    Ok(log_dir)
+}
+
+/// Create a new log file with timestamp
+fn create_new_log_file(log_dir: &PathBuf) -> Result<BufWriter<File>, String> {
+    let now = Local::now();
+    let filename = format!("transcription_{}.txt", now.format("%Y%m%d_%H%M%S"));
+    let filepath = log_dir.join(&filename);
+
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&filepath)
+        .map_err(|e| format!("Failed to create log file: {}", e))?;
+
+    let mut writer = BufWriter::new(file);
+
+    // Write header
+    let header = format!(
+        "═══════════════════════════════════════════════════════════════════════════\n\
+         LIVE CAPTIONS TRANSCRIPTION LOG\n\
+         Started: {}\n\
+         ═══════════════════════════════════════════════════════════════════════════\n\n",
+        now.format("%Y-%m-%d %H:%M:%S")
+    );
+
+    writer.write_all(header.as_bytes())
+        .map_err(|e| format!("Failed to write header: {}", e))?;
+    writer.flush()
+        .map_err(|e| format!("Failed to flush: {}", e))?;
+
+    println!("📝 Created new log file: {}", filename);
+
+    Ok(writer)
+}
+
+/// Rotate log files - keep only the 10 most recent
+fn rotate_log_files(log_dir: &PathBuf) -> Result<(), String> {
+    let mut log_files: Vec<_> = fs::read_dir(log_dir)
+        .map_err(|e| format!("Failed to read log dir: {}", e))?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry.path().extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext == "txt")
+                .unwrap_or(false)
+        })
+        .filter_map(|entry| {
+            let metadata = entry.metadata().ok()?;
+            let modified = metadata.modified().ok()?;
+            Some((entry.path(), modified))
+        })
+        .collect();
+
+    // Sort by modification time (newest first)
+    log_files.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Keep only 10 most recent, delete the rest
+    if log_files.len() > 10 {
+        println!("🗑️ Rotating log files, keeping 10 most recent...");
+        for (path, _) in log_files.iter().skip(10) {
+            if let Err(e) = fs::remove_file(path) {
+                eprintln!("⚠ Failed to delete old log file {:?}: {}", path, e);
+            } else {
+                println!("   Deleted: {:?}", path.file_name());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Write a caption to the log file (lazy initialization - creates file on first caption)
+fn write_caption_to_log(
+    log_file: &Arc<Mutex<Option<BufWriter<File>>>>,
+    log_dir: &Arc<Mutex<PathBuf>>,
+    text: &str,
+    language: &str,
+) -> Result<(), String> {
+    let mut log_file_guard = log_file.lock().unwrap();
+
+    // Lazy initialization: create log file on first caption
+    if log_file_guard.is_none() {
+        let log_dir_path = log_dir.lock().unwrap();
+        if !log_dir_path.as_os_str().is_empty() {
+            match create_new_log_file(&log_dir_path) {
+                Ok(writer) => {
+                    *log_file_guard = Some(writer);
+                    println!("✓ Transcription logging enabled (first caption received)");
+                }
+                Err(e) => {
+                    eprintln!("⚠ Failed to create log file on first caption: {}", e);
+                    return Err(e);
+                }
+            }
+        } else {
+            return Err("Log directory not initialized".to_string());
+        }
+    }
+
+    if let Some(writer) = log_file_guard.as_mut() {
+        let now = Local::now();
+        let log_entry = format!(
+            "[{}] [{}] {}\n",
+            now.format("%H:%M:%S"),
+            language.to_uppercase(),
+            text
+        );
+
+        writer.write_all(log_entry.as_bytes())
+            .map_err(|e| format!("Failed to write caption: {}", e))?;
+        writer.flush()
+            .map_err(|e| format!("Failed to flush: {}", e))?;
+    }
+
+    Ok(())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -195,6 +433,7 @@ async fn start_capture(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     device_type: String,
+    model_size: String,
 ) -> Result<String, String> {
     let mut is_capturing = state.is_capturing.lock().unwrap();
 
@@ -205,7 +444,59 @@ async fn start_capture(
     *is_capturing = true;
     drop(is_capturing);
 
-    println!("✓ Live capture enabled - captions will emit to main window");
+    // Show overlay window (re-apply transparency to prevent flash)
+    if let Some(overlay) = app_handle.get_webview_window("overlay") {
+        // Get screen resolution and calculate centered position
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+            unsafe {
+                let screen_width = GetSystemMetrics(SM_CXSCREEN);
+                let screen_height = GetSystemMetrics(SM_CYSCREEN);
+
+                // Calculate overlay dimensions: 90% of screen width, 150px height
+                let overlay_width = (screen_width as f32 * 0.9) as i32;
+                let overlay_height = 150;
+
+                // Center horizontally, position 100px from bottom
+                let x = (screen_width - overlay_width) / 2;
+                let y = screen_height - overlay_height - 100;
+
+                println!("📐 Screen: {}x{}, Overlay: {}x{} at ({}, {})",
+                    screen_width, screen_height, overlay_width, overlay_height, x, y);
+
+                // Set position and size
+                use tauri::PhysicalPosition;
+                let _ = overlay.set_position(PhysicalPosition::new(x, y));
+                let _ = overlay.set_size(tauri::PhysicalSize::new(overlay_width as u32, overlay_height as u32));
+            }
+        }
+
+        setup_overlay_transparency(&overlay);  // Re-apply before showing
+        let _ = overlay.show();
+        println!("✓ Overlay window shown");
+    } else {
+        eprintln!("⚠ Warning: Overlay window not found");
+    }
+
+    println!("✓ Live capture enabled - captions will emit to overlay window");
+
+    // Initialize transcription logging directory (file created lazily on first caption)
+    let log_dir = match get_transcription_dir(&app_handle) {
+        Ok(dir) => {
+            // Rotate old log files (keep max 10)
+            let _ = rotate_log_files(&dir);
+
+            // Store log directory for lazy file creation
+            *state.log_dir.lock().unwrap() = dir.clone();
+            println!("✓ Transcription logging directory ready (file will be created on first caption)");
+            dir
+        }
+        Err(e) => {
+            eprintln!("⚠ Failed to get transcription directory: {}", e);
+            PathBuf::new()
+        }
+    };
 
     // Start WebSocket connection
     let (audio_tx, mut audio_rx) = mpsc::unbounded_channel::<Vec<f32>>();
@@ -213,6 +504,8 @@ async fn start_capture(
 
     // Spawn WebSocket task
     let app_handle_ws = app_handle.clone();
+    let log_file_clone = state.log_file.clone();
+    let log_dir_clone = state.log_dir.clone();
     let task_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -231,7 +524,7 @@ async fn start_capture(
                 let config = serde_json::json!({
                     "type": "config",
                     "language": null,
-                    "model_size": "tiny"
+                    "model_size": model_size
                 });
                 let _ = write.send(Message::Text(config.to_string())).await;
 
@@ -299,11 +592,20 @@ async fn start_capture(
 
                                         println!("📝 Caption: {}", caption.text);
 
-                                        // Emit to the MAIN window
-                                        println!("[EMIT] Emitting caption to main window...");
-                                        match app_handle_ws.emit("caption", &caption) {
-                                            Ok(_) => println!("✓ Caption emitted to main window successfully"),
-                                            Err(e) => eprintln!("❌ Failed to emit caption: {}", e),
+                                        // Write to log file (lazy initialization on first caption)
+                                        if let Err(e) = write_caption_to_log(&log_file_clone, &log_dir_clone, &caption.text, &caption.language) {
+                                            eprintln!("⚠ Failed to write caption to log: {}", e);
+                                        }
+
+                                        // Emit to the OVERLAY window
+                                        if let Some(overlay) = app_handle_ws.get_webview_window("overlay") {
+                                            println!("[EMIT] Emitting caption to overlay window...");
+                                            match overlay.emit("caption", &caption) {
+                                                Ok(_) => println!("✓ Caption emitted to overlay window successfully"),
+                                                Err(e) => eprintln!("❌ Failed to emit caption to overlay: {}", e),
+                                            }
+                                        } else {
+                                            eprintln!("⚠ Overlay window not found, cannot emit caption");
                                         }
                                     } else {
                                         println!("[WS] Skipping non-caption message (type: {:?})", data.get("type"));
@@ -357,14 +659,67 @@ async fn start_capture(
 }
 
 #[tauri::command]
-async fn stop_capture(_app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+async fn stop_capture(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let mut is_capturing = state.is_capturing.lock().unwrap();
     *is_capturing = false;
     *state.ws_tx.lock().unwrap() = None;
 
+    // Close log file
+    if let Some(mut writer) = state.log_file.lock().unwrap().take() {
+        let _ = writer.flush();
+        println!("✓ Transcription log file closed");
+    }
+
+    // Hide overlay window
+    if let Some(overlay) = app_handle.get_webview_window("overlay") {
+        let _ = overlay.hide();
+        println!("✓ Overlay window hidden");
+    }
+
     println!("✓ Capture stopped");
 
     Ok("Capture stopped".to_string())
+}
+
+#[tauri::command]
+async fn open_transcription_folder(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    let log_dir = state.log_dir.lock().unwrap();
+
+    if log_dir.as_os_str().is_empty() {
+        return Err("Transcription directory not initialized".to_string());
+    }
+
+    if !log_dir.exists() {
+        return Err("Transcription directory does not exist".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(log_dir.as_os_str())
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(log_dir.as_os_str())
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(log_dir.as_os_str())
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    println!("✓ Opened transcription folder: {:?}", log_dir);
+
+    Ok(format!("Opened folder: {:?}", log_dir))
 }
 
 
@@ -604,10 +959,22 @@ fn main() {
     let app_state = AppState {
         is_capturing: Arc::new(Mutex::new(false)),
         ws_tx: Arc::new(Mutex::new(None)),
+        log_file: Arc::new(Mutex::new(None)),
+        log_dir: Arc::new(Mutex::new(PathBuf::new())),
     };
 
     tauri::Builder::default()
         .setup(|app| {
+            // ═══════════════════════════════════════════════════════════════
+            // OVERLAY WINDOW - Configure transparency and click-through
+            // ═══════════════════════════════════════════════════════════════
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                setup_overlay_transparency(&overlay);
+                println!("✓ Overlay window setup complete");
+            } else {
+                eprintln!("⚠ Warning: Overlay window not found during setup");
+            }
+
             // ═══════════════════════════════════════════════════════════════
             // SMART LAUNCHER - Initialize backend on startup
             // ═══════════════════════════════════════════════════════════════
@@ -661,7 +1028,7 @@ fn main() {
         })
         .manage(app_state)
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![start_capture, stop_capture])
+        .invoke_handler(tauri::generate_handler![start_capture, stop_capture, open_transcription_folder])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

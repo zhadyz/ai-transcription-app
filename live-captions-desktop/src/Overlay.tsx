@@ -66,7 +66,7 @@ export default function Overlay() {
 
   return (
     <div
-      className="fixed inset-0 flex items-end justify-center pb-20"
+      className="fixed inset-0 flex items-end justify-center pb-8"
       style={{
         background: 'transparent',
         pointerEvents: 'none',
@@ -76,21 +76,25 @@ export default function Overlay() {
         {captions.length > 0 && (
           <motion.div
             key={captions[0].timestamp}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
             style={{ pointerEvents: 'none' }}
           >
             <div
               style={{
-                backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                backgroundColor: 'rgba(0, 0, 0, 0.85)',
                 color: '#FFFFFF',
-                padding: '8px 16px',
-                fontSize: '18px',
+                padding: '12px 24px',
+                fontSize: '24px',
                 fontWeight: '600',
                 textAlign: 'center',
+                borderRadius: '8px',
                 pointerEvents: 'none',
+                textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9)',
+                maxWidth: '90vw',
+                wordWrap: 'break-word',
               }}
             >
               {captions[0].text}

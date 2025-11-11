@@ -41,6 +41,27 @@
         "skipTaskbar": false,
         "visible": true,
         "center": true
+      },
+      {
+        "label": "overlay",
+        "title": "Caption Overlay",
+        "url": "overlay.html",
+        "width": 1920,
+        "height": 150,
+        "x": 0,
+        "y": 930,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": false,
+        "focus": false,
+        "shadow": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
@@ -58,6 +79,17 @@
             "core:event:allow-listen",
             "core:event:allow-emit",
             "core:event:allow-emit-to"
+          ]
+        },
+        {
+          "identifier": "overlay-capability",
+          "windows": ["overlay"],
+          "permissions": [
+            "core:event:allow-listen",
+            "core:event:allow-emit",
+            "core:window:allow-show",
+            "core:window:allow-hide",
+            "core:window:allow-set-always-on-top"
           ]
         }
       ]

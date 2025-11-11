@@ -33,11 +33,15 @@ reqwest = { version = "0.11", features = ["json"] }
 # Process management
 which = "5.0"
 
+# Date/time for timestamps
+chrono = "0.4"
+
 # Windows API for click-through overlay and WASAPI
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dwm",
     "Win32_Media_Audio",
     "Win32_System_Com",
 ] }

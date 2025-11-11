@@ -17,7 +17,7 @@ export interface LiveCaptureSettings {
   fontSize: 'small' | 'medium' | 'large' | 'xlarge';
   position: 'top' | 'bottom' | 'center';
   showTranslation: boolean;
-  transcriptionMode: 'realtime' | 'accurate';
+  modelSize: 'tiny' | 'small' | 'medium';
   audioSource: 'microphone' | 'system';
 }
 
@@ -75,7 +75,7 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
     fontSize: 'large',
     position: 'bottom',
     showTranslation: false,
-    transcriptionMode: 'realtime',
+    modelSize: 'medium',
     audioSource: 'microphone',
   });
 
@@ -99,8 +99,11 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
       console.log('[LiveCapture] Starting capture via Rust backend...');
       console.log('[LiveCapture] Audio source:', settings.audioSource);
 
-      // Call Rust command to start capture with device type
-      await invoke('start_capture', { deviceType: settings.audioSource });
+      // Call Rust command to start capture with device type and model size
+      await invoke('start_capture', {
+        deviceType: settings.audioSource,
+        modelSize: settings.modelSize
+      });
 
       console.log('[LiveCapture] Started successfully');
     } catch (err) {
