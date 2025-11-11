@@ -1,0 +1,43 @@
+[package]
+name = "live-captions-desktop"
+version = "1.0.0"
+description = "Real-time system audio captions with overlay"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools", "tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Audio capture
+cpal = "0.15"
+hound = "3.5"
+rubato = "0.14"  # Audio resampling
+
+# WebSocket client
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+# Async runtime
+async-std = "1.12"
+
+# HTTP client for health checks
+reqwest = { version = "0.11", features = ["json"] }
+
+# Process management
+which = "5.0"
+
+# Windows API for click-through overlay and WASAPI
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+] }
