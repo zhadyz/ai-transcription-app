@@ -42,6 +42,7 @@ python-magic==0.4.27
 # ==================== UTILITIES ====================
 tenacity==9.0.0
 python-dateutil==2.9.0
+netifaces==0.11.0  # Network interface detection for Docker/host IP
 
 # ==================== RATE LIMITING ====================
 slowapi==0.1.9

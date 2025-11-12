@@ -29,6 +29,7 @@ services:
       - WHISPER_DEVICE=cuda
       - MAX_FILE_SIZE_MB=5000
       - LIBRETRANSLATE_URL=http://libretranslate:5000
+      - HOST_IP=${HOST_IP}
     
     deploy:
       resources:

@@ -1,7 +1,7 @@
 {
-  "productName": "Live Captions",
-  "version": "1.0.0",
-  "identifier": "com.livecaptions.app",
+  "productName": "Stygian Captions",
+  "version": "1.0.1",
+  "identifier": "com.stygian.captions",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -18,7 +18,7 @@
       "icons/256x256.png",
       "icons/512x512.png",
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/stygian.ico"
     ],
     "windows": {
       "certificateThumbprint": null,

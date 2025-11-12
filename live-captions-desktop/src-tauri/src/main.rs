@@ -17,6 +17,7 @@ use tokio::time::sleep;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
 use chrono::Local;
+use sysinfo::{System, Disks};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{HWND, COLORREF};
@@ -43,6 +44,15 @@ struct ConfigUpdate {
     translate_to: Option<String>,
     show_translation: bool,
     model_size: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct SystemRequirements {
+    cpu_cores: usize,
+    ram_gb: f64,
+    disk_space_gb: f64,
+    meets_requirements: bool,
+    warnings: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -1136,6 +1146,82 @@ fn mark_setup_complete(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Check system requirements for running live captions
+#[tauri::command]
+fn check_system_requirements() -> SystemRequirements {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    // Get system info
+    let cpu_cores = sys.cpus().len();
+    let total_memory_bytes = sys.total_memory();
+    let available_memory_bytes = sys.available_memory();
+
+    // Convert to GB
+    let ram_gb = total_memory_bytes as f64 / 1_073_741_824.0; // 1024^3
+
+    // Get available disk space (use disk with most available space, typically C: on Windows)
+    let disks = Disks::new_with_refreshed_list();
+    let disk_space_gb = disks
+        .iter()
+        .map(|disk| disk.available_space() as f64 / 1_073_741_824.0)
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
+
+    // Minimum requirements
+    const MIN_CPU_CORES: usize = 4;
+    const MIN_RAM_GB: f64 = 8.0;
+    const MIN_DISK_GB: f64 = 10.0;
+
+    // Check requirements and collect warnings
+    let mut warnings = Vec::new();
+    let mut meets_requirements = true;
+
+    if cpu_cores < MIN_CPU_CORES {
+        warnings.push(format!(
+            "CPU cores below recommended ({} cores, recommended: {} cores)",
+            cpu_cores, MIN_CPU_CORES
+        ));
+        meets_requirements = false;
+    }
+
+    if ram_gb < MIN_RAM_GB {
+        warnings.push(format!(
+            "RAM below recommended ({:.1} GB, recommended: {:.1} GB)",
+            ram_gb, MIN_RAM_GB
+        ));
+        meets_requirements = false;
+    }
+
+    if disk_space_gb < MIN_DISK_GB {
+        warnings.push(format!(
+            "Disk space below recommended ({:.1} GB available, recommended: {:.1} GB)",
+            disk_space_gb, MIN_DISK_GB
+        ));
+        meets_requirements = false;
+    }
+
+    // Check available memory (not just total)
+    let available_ram_gb = available_memory_bytes as f64 / 1_073_741_824.0;
+    if available_ram_gb < 4.0 {
+        warnings.push(format!(
+            "Low available memory ({:.1} GB free, recommended: 4.0 GB free)",
+            available_ram_gb
+        ));
+    }
+
+    println!("System check: {} cores, {:.1}GB RAM, {:.1}GB disk space",
+             cpu_cores, ram_gb, disk_space_gb);
+
+    SystemRequirements {
+        cpu_cores,
+        ram_gb,
+        disk_space_gb,
+        meets_requirements,
+        warnings,
+    }
+}
+
 fn main() {
     let app_state = AppState {
         is_capturing: Arc::new(Mutex::new(false)),
@@ -1217,7 +1303,8 @@ fn main() {
             update_capture_config,
             open_transcription_folder,
             is_setup_complete,
-            mark_setup_complete
+            mark_setup_complete,
+            check_system_requirements
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

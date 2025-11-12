@@ -167,9 +167,11 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
       const data = await response.json()
       const newSessionId = data.session_id
       const serverIP = data.server_ip || window.location.hostname
+      const qrData = data.qr_data
 
       console.log('✅ [Desktop] Session created on backend:', newSessionId)
       console.log('📡 [Desktop] Server IP for QR:', serverIP)
+      console.log('📱 [Desktop] QR Data from backend:', qrData)
 
       // STEP 3: Wait for backend to fully initialize session (with retry)
       console.log('⏳ [Desktop] Waiting for backend to initialize session...')
@@ -196,7 +198,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
       
       recoveryRef.current = { attempts: 0, lastAttempt: 0, backoffMs: INITIAL_BACKOFF }
 
-      return { sessionId: newSessionId, serverIP }
+      return { sessionId: newSessionId, serverIP, qrData }
     } catch (err) {
       console.error('❌ [Desktop] Session creation error:', err)
       return null
@@ -233,15 +235,15 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
 
     const result = await createSession()
     if (result && mountedRef.current) {
-      await initSession(result.sessionId, result.serverIP)
+      await initSession(result.sessionId, result.qrData, result.serverIP)
     } else if (mountedRef.current) {
       setState(prev => ({ ...prev, error: 'Recovery failed', isConnected: false }))
     }
   }, [createSession, clearPersistedSession, destroyCurrentSession])
 
-  const initSession = useCallback(async (sessionId: string, serverIP?: string) => {
+  const initSession = useCallback(async (sessionId: string, qrUrl: string, serverIP?: string) => {
     console.log('🎯 [Desktop] Initializing DistributedSession:', sessionId)
-    
+
     const generateUUID = () => {
       if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID()
@@ -257,19 +259,14 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     localStorage.setItem('device-id', deviceId)
 
     const deviceType = /mobile/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
-    
+
     // Create DistributedSession - this will connect WebSocket
     console.log('🎯 [Desktop] Creating DistributedSession with WebSocket')
     const session = new DistributedSession(sessionId, backendUrl, deviceId, deviceType)
     sessionRef.current = session
 
-    // Generate QR URL - Use server IP from backend if available
-    const hostname = serverIP || window.location.hostname
-    const protocol = window.location.protocol
-    const port = window.location.port
-    const qrUrl = `${protocol}//${hostname}${port ? ':' + port : ''}/mobile-upload?session=${sessionId}`
-
-    console.log('🌐 [Desktop] QR URL:', qrUrl)
+    // Use QR URL from backend (already has correct IP and port)
+    console.log('🌐 [Desktop] QR URL from backend:', qrUrl)
     if (serverIP && serverIP !== window.location.hostname) {
       console.log('✅ [Desktop] Using server IP for mobile access:', serverIP)
     }
@@ -365,7 +362,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     const init = async () => {
       const result = await createSession()
       if (result && mountedRef.current) {
-        await initSession(result.sessionId, result.serverIP)
+        await initSession(result.sessionId, result.qrData, result.serverIP)
       }
     }
 
@@ -419,7 +416,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
 
     const result = await createSession()
     if (result && mountedRef.current) {
-      await initSession(result.sessionId, result.serverIP)
+      await initSession(result.sessionId, result.qrData, result.serverIP)
     }
   }, [createSession, initSession, destroyCurrentSession, clearPersistedSession])
 

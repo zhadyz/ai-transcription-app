@@ -27,13 +27,6 @@ interface SystemRequirements {
   warnings: string[]
 }
 
-interface PythonInfo {
-  installed: boolean
-  version: string
-  meets_requirements: boolean
-  path: string
-}
-
 export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [steps, setSteps] = useState<SetupStep[]>([
@@ -45,30 +38,16 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
       progress: 0
     },
     {
+      id: 'backend-setup',
+      title: 'Backend Connection',
+      description: 'Connecting to Docker backend',
+      status: 'pending',
+      progress: 0
+    },
+    {
       id: 'gpu-detection',
       title: 'GPU Detection',
       description: 'Detecting NVIDIA GPU and CUDA capabilities',
-      status: 'pending',
-      progress: 0
-    },
-    {
-      id: 'python-check',
-      title: 'Python Environment',
-      description: 'Verifying Python 3.11 installation',
-      status: 'pending',
-      progress: 0
-    },
-    {
-      id: 'backend-setup',
-      title: 'Backend Initialization',
-      description: 'Starting FastAPI server and loading models',
-      status: 'pending',
-      progress: 0
-    },
-    {
-      id: 'model-download',
-      title: 'AI Model Loading',
-      description: 'Downloading Whisper and translation models',
       status: 'pending',
       progress: 0
     }
@@ -126,8 +105,36 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
 
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Step 2: GPU Detection
+      // Step 2: Backend Connection
       setCurrentStepIndex(1)
+      updateStepStatus('backend-setup', { status: 'running', progress: 0 })
+
+      try {
+        await fetch('http://localhost:8000/health')
+
+        for (let i = 0; i <= 100; i += 20) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+          updateStepStatus('backend-setup', { progress: i })
+        }
+
+        updateStepStatus('backend-setup', {
+          status: 'complete',
+          progress: 100,
+          description: 'Connected to Docker backend on localhost:8000'
+        })
+      } catch (error) {
+        hasErrors = true
+        updateStepStatus('backend-setup', {
+          status: 'error',
+          errorMessage: 'Backend not running. Please run: docker-compose up -d'
+        })
+        return
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 3: GPU Detection
+      setCurrentStepIndex(2)
       updateStepStatus('gpu-detection', { status: 'running', progress: 0 })
 
       try {
@@ -142,117 +149,17 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
         updateStepStatus('gpu-detection', {
           status: 'complete',
           progress: 100,
-          description: `Detected: ${gpuInfo.device_name}`
+          description: `${gpuInfo.device_name}`
         })
       } catch (error) {
         updateStepStatus('gpu-detection', {
           status: 'complete',
           progress: 100,
-          description: 'Running on CPU (GPU not required)'
+          description: 'CPU mode (GPU not available)'
         })
       }
 
       await new Promise(resolve => setTimeout(resolve, 500))
-
-      // Step 3: Python Version Check
-      setCurrentStepIndex(2)
-      updateStepStatus('python-check', { status: 'running', progress: 0 })
-
-      try {
-        const pythonInfo = await invoke<PythonInfo>('check_python_version')
-
-        // Animate progress while checking
-        for (let i = 0; i <= 100; i += 25) {
-          await new Promise(resolve => setTimeout(resolve, 50))
-          updateStepStatus('python-check', { progress: i })
-        }
-
-        if (pythonInfo.installed) {
-          const pythonDescription = pythonInfo.meets_requirements
-            ? `Python ${pythonInfo.version} (${pythonInfo.path})`
-            : `Python ${pythonInfo.version} - Version 3.11 required`
-
-          if (pythonInfo.meets_requirements) {
-            updateStepStatus('python-check', {
-              status: 'complete',
-              progress: 100,
-              description: pythonDescription
-            })
-          } else {
-            hasErrors = true
-            updateStepStatus('python-check', {
-              status: 'error',
-              progress: 100,
-              description: pythonDescription,
-              errorMessage: 'Python 3.11 is required. Please install it and restart.'
-            })
-            return
-          }
-        } else {
-          hasErrors = true
-          updateStepStatus('python-check', {
-            status: 'error',
-            progress: 100,
-            description: 'Not installed',
-            errorMessage: 'Python is not installed. Please install Python 3.11 and restart.'
-          })
-          return
-        }
-      } catch (error) {
-        hasErrors = true
-        updateStepStatus('python-check', {
-          status: 'error',
-          errorMessage: `Failed to check Python: ${error}`
-        })
-        return
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // Step 4: Backend Setup
-      setCurrentStepIndex(3)
-      updateStepStatus('backend-setup', { status: 'running', progress: 0 })
-
-      // Check if backend is running
-      try {
-        await fetch('http://localhost:8000/health')
-
-        for (let i = 0; i <= 100; i += 20) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-          updateStepStatus('backend-setup', { progress: i })
-        }
-
-        updateStepStatus('backend-setup', {
-          status: 'complete',
-          progress: 100,
-          description: 'FastAPI server running on localhost:8000'
-        })
-      } catch (error) {
-        hasErrors = true
-        updateStepStatus('backend-setup', {
-          status: 'error',
-          errorMessage: 'Backend server not running. Please start the backend manually and restart the app.'
-        })
-        return
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // Step 5: Model Loading (simulated for now)
-      setCurrentStepIndex(4)
-      updateStepStatus('model-download', { status: 'running', progress: 0 })
-
-      for (let i = 0; i <= 100; i += 5) {
-        await new Promise(resolve => setTimeout(resolve, 150))
-        updateStepStatus('model-download', { progress: i })
-      }
-
-      updateStepStatus('model-download', {
-        status: 'complete',
-        progress: 100,
-        description: 'Models loaded and ready for transcription'
-      })
-      await new Promise(resolve => setTimeout(resolve, 1000))
 
       // Mark setup as complete only if no errors occurred
       if (!hasErrors) {
@@ -301,27 +208,15 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
           transition={{ delay: 0.2 }}
           className="text-center mb-12"
         >
-          <div className="flex items-center justify-center mb-4">
-            <div
-              className="mr-4"
-              style={{
-                width: "16px",
-                height: "16px",
-                borderRadius: "50%",
-                background: "#ff8c00",
-                boxShadow: "0 0 30px rgba(255, 140, 0, 1), 0 0 50px rgba(255, 100, 0, 0.9)"
-              }}
-            />
-            <h1
-              className="text-5xl font-light tracking-[0.3em] uppercase"
-              style={{
-                color: "#e89a2f",
-                textShadow: "0 0 20px rgba(255, 140, 0, 0.5), 0 0 40px rgba(228, 154, 47, 0.3)"
-              }}
-            >
-              STYGIAN
-            </h1>
-          </div>
+          <h1
+            className="text-5xl font-light tracking-[0.3em] uppercase mb-4"
+            style={{
+              color: "#e89a2f",
+              textShadow: "0 0 20px rgba(255, 140, 0, 0.5), 0 0 40px rgba(228, 154, 47, 0.3)"
+            }}
+          >
+            STYGIAN
+          </h1>
           <p className="text-amber-200/60 text-sm tracking-[0.2em] uppercase">
             First-Time Setup
           </p>

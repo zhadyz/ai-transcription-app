@@ -202,15 +202,17 @@ const getCurrentEndpoint = (): BackendEndpoint => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const getBackendUrl = (): string => {
-  // Hardcoded for stability (change port here if needed)
-  console.log('🔧 [Backend] Using backend URL: http://localhost:8000')
-  return 'http://localhost:8000'
+  // Use current hostname for cross-device compatibility
+  const url = `http://${hostname}:8000`
+  console.log('🔧 [Backend] Using backend URL:', url)
+  return url
 }
 
 export const getWebSocketUrl = (): string => {
-  // Hardcoded for stability (change port here if needed)
-  console.log('🔧 [Backend] Using WebSocket URL: ws://localhost:8000')
-  return 'ws://localhost:8000'
+  // Use current hostname for cross-device compatibility
+  const url = `ws://${hostname}:8000`
+  console.log('🔧 [Backend] Using WebSocket URL:', url)
+  return url
 }
 
 export const supportsStreaming = (): boolean => {
@@ -264,8 +266,9 @@ export const getBackendConfig = async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 console.log('🔧 [Backend Config] Configuration loaded:', {
-  url: 'http://localhost:8000',
-  wsUrl: 'ws://localhost:8000'
+  url: `http://${hostname}:8000`,
+  wsUrl: `ws://${hostname}:8000`,
+  hostname
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

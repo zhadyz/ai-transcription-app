@@ -17,7 +17,7 @@ export interface LiveCaptureSettings {
   fontSize: 'small' | 'medium' | 'large' | 'xlarge';
   position: 'top' | 'bottom' | 'center';
   showTranslation: boolean;
-  modelSize: 'tiny' | 'small' | 'medium';
+  modelSize: 'small' | 'medium' | 'large' | 'large-v2';
   audioSource: 'microphone' | 'system';
   discordWebhook?: string | null;
   discordEnabled: boolean;

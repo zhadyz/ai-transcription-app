@@ -36,12 +36,15 @@ export const useTranslation = (backendUrl: string) => {
       .then(r => r.json())
       .then(data => {
         if (isMountedRef.current) {
-          setAvailableLanguages(
-            Object.entries(data.languages).map(([code, name]) => ({
-              code,
-              name: name as string
-            }))
-          )
+          // Handle both object format {code, name, nllb_code} and string format
+          const languages = Object.entries(data.languages).map(([code, langData]: [string, any]) => {
+            if (typeof langData === 'string') {
+              return { code, name: langData }
+            } else {
+              return { code, name: langData.name }
+            }
+          })
+          setAvailableLanguages(languages)
         }
       })
       .catch(() => {})

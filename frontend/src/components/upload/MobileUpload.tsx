@@ -240,15 +240,19 @@ function MobileUploadContent() {
         className="w-full max-w-md relative"
         style={{ zIndex: 10 }}
       >
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
+        <div className="backdrop-blur-xl bg-black/60 border border-white/[0.08] rounded-2xl p-8 shadow-2xl">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Upload to Desktop</h1>
-            <p className="text-gray-400">
-              CRDT Peer 🌌 • {mobileSession.isConnected ? '🟢 Connected' : '🟡 Connecting...'}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {mobileSession.deviceCount} device{mobileSession.deviceCount !== 1 ? 's' : ''} in session
-            </p>
+            <h1 className="text-2xl font-light text-white mb-2 tracking-tight">
+              Upload
+            </h1>
+
+            {/* Minimal status indicator - only show when connecting */}
+            {!mobileSession.isConnected && (
+              <div className="flex items-center justify-center gap-2 text-xs mt-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400/60 animate-pulse" />
+                <span className="text-gray-500 font-normal">Connecting to desktop</span>
+              </div>
+            )}
           </div>
 
           {!selectedFile ? (
@@ -271,15 +275,27 @@ function MobileUploadContent() {
           )}
 
           {transcription.progress && transcription.progress.status === 'processing' && (
-            <div className="mt-6 p-6 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-              <div className="space-y-3">
+            <div className="mt-6 p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl backdrop-blur-sm">
+              <div className="space-y-4">
                 <div className="flex items-center justify-center gap-3">
-                  <div className="animate-spin w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full"></div>
-                  <p className="text-blue-300 font-semibold">Transcribing... (synced via CRDT)</p>
+                  <div className="relative">
+                    <div className="animate-spin w-6 h-6 border-2 border-blue-400/30 border-t-blue-400 rounded-full"></div>
+                    <div className="absolute inset-0 w-6 h-6 border-2 border-blue-400/20 rounded-full blur-sm"></div>
+                  </div>
+                  <p className="text-blue-300 font-semibold">Processing</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm text-blue-200">{Math.round(transcription.progress.progress)}%</p>
-                  <p className="text-xs text-blue-300/60 mt-1">{transcription.progress.current_step}</p>
+                <div className="space-y-2">
+                  {/* Progress Bar */}
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
+                      style={{ width: `${Math.round(transcription.progress?.progress || 0)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <p className="text-blue-300/80">{transcription.progress?.current_step || 'Processing...'}</p>
+                    <p className="text-blue-200 font-medium">{Math.round(transcription.progress?.progress || 0)}%</p>
+                  </div>
                 </div>
               </div>
             </div>

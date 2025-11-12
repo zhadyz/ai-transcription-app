@@ -46,6 +46,9 @@ set NETWORK_IP=localhost
 echo [OK] Network: %NETWORK_IP%
 echo.
 
+:: Create .env file for docker-compose
+echo HOST_IP=%NETWORK_IP% > .env
+
 :: Start containers
 echo [*] Starting services...
 echo     (First time: 5-10 minutes to download)

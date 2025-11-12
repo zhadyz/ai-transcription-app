@@ -81,7 +81,7 @@ export function MobileTranscriptionCard({
         className="text-lg font-light tracking-tight text-white leading-tight"
         style={{ letterSpacing: '-0.025em' }}
       >
-        Complete! ✨ (CRDT synced)
+        Transcription Complete
       </motion.h3>
 
       <AnimatePresence mode="wait">
@@ -94,14 +94,14 @@ export function MobileTranscriptionCard({
             value={targetLanguage}
             onChange={(e) => onTargetLanguageChange(e.target.value)}
             className="w-full bg-white/5 backdrop-blur-xl border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-light appearance-none bg-no-repeat bg-right pr-10"
-            style={{ 
+            style={{
               backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3E%3Cpath stroke=\'%23A1A1AA\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M6 8l4 4 4-4\'/%3E%3C/svg%3E")',
               backgroundPosition: 'right 0.75rem center',
               backgroundSize: '1.25em 1.25em'
             }}
           >
             {availableLanguages
-              .filter(lang => lang.code !== result.language_detected)
+              .filter(lang => lang.code !== result?.language_detected)
               .map(lang => (
                 <option key={lang.code} value={lang.code}>{lang.name}</option>
               ))}
@@ -150,16 +150,16 @@ export function MobileTranscriptionCard({
         )}
       </AnimatePresence>
 
-      <motion.div 
+      <motion.div
         variants={childVariants}
-        onClick={onShowFull} 
+        onClick={onShowFull}
         className="p-5 bg-gradient-to-b from-white/3 via-black/10 to-black/20 backdrop-blur-xl rounded-2xl border border-white/10 cursor-pointer hover:border-white/20 transition-colors duration-300 overflow-hidden" // Extended gradient bleed: Vertical gradient from light to stronger dark for deeper immersion; stronger bottom dark
         style={{ boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.15)' }} // Slightly stronger shadow for enhanced depth
       >
         <div className="space-y-3">
           <AnimatePresence>
-            {result.segments.slice(0, 3).map((seg, i) => (
-              <motion.p 
+            {result?.segments && result.segments.slice(0, 3).map((seg, i) => (
+              <motion.p
                 key={i}
                 variants={segmentVariants}
                 initial="hidden"
@@ -167,11 +167,11 @@ export function MobileTranscriptionCard({
                 custom={i}
                 className="text-gray-200 text-sm leading-relaxed"
               >
-                {seg.text}
+                {seg?.text || ''}
               </motion.p>
             ))}
           </AnimatePresence>
-          {result.segments.length > 3 && (
+          {result?.segments && result.segments.length > 3 && (
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

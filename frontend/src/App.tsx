@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useMemo } from 'react'
 import { SessionProvider } from './core/SessionContext'
 import { WebSocketProvider } from './core/WebSocketContext'
@@ -29,6 +29,44 @@ const BackgroundMedia = () => (
   </video>
 )
 
+function AppContent() {
+  const location = useLocation()
+  const isMobileUpload = location.pathname === '/mobile-upload'
+
+  return (
+    <div className="relative min-h-screen bg-black">
+      <BackgroundMedia />
+      <DeviceIndicator />
+
+      {/* Live Transcription Button - Fixed Top Right (hidden on mobile upload) */}
+      {!isMobileUpload && (
+        <div className="fixed top-4 right-4 z-50">
+          <LiveCapturePanel />
+        </div>
+      )}
+
+      <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+        <Routes>
+          <Route path="/" element={
+            <div className="relative z-10 container mx-auto px-4 py-12">
+              <header className="text-center mb-12">
+                <h1 className="text-5xl font-bold text-white mb-4">
+                  AI Transcription Studio
+                </h1>
+                <p className="text-xl text-gray-400">
+                  Transform audio and video into accurate transcripts
+                </p>
+              </header>
+              <FileUpload />
+            </div>
+          } />
+          <Route path="/mobile-upload" element={<MobileUpload />} />
+        </Routes>
+      </Suspense>
+    </div>
+  )
+}
+
 export default function App() {
   console.log('🎨🎨🎨 [APP.TSX] App component rendering!')
 
@@ -44,34 +82,7 @@ export default function App() {
       <SessionProvider backendUrl={backendUrl}>
         <WebSocketProvider>
           <LiveCaptureProvider>
-            <div className="relative min-h-screen bg-black">
-              <BackgroundMedia />
-              <DeviceIndicator />
-
-              {/* Live Transcription Button - Fixed Top Right */}
-              <div className="fixed top-4 right-4 z-50">
-                <LiveCapturePanel />
-              </div>
-
-              <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
-                <Routes>
-                  <Route path="/" element={
-                    <div className="relative z-10 container mx-auto px-4 py-12">
-                      <header className="text-center mb-12">
-                        <h1 className="text-5xl font-bold text-white mb-4">
-                          AI Transcription Studio
-                        </h1>
-                        <p className="text-xl text-gray-400">
-                          Transform audio and video into accurate transcripts
-                        </p>
-                      </header>
-                      <FileUpload />
-                    </div>
-                  } />
-                  <Route path="/mobile-upload" element={<MobileUpload />} />
-                </Routes>
-              </Suspense>
-            </div>
+            <AppContent />
           </LiveCaptureProvider>
         </WebSocketProvider>
       </SessionProvider>
