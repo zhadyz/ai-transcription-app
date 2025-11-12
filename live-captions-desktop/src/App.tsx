@@ -8,7 +8,6 @@ import { LiveCaptureProvider, useLiveCapture } from './contexts/LiveCaptureConte
 import { LiveCapturePanel, CaptionOverlay } from './components/livecapture'
 import { SimpleDeviceIndicator } from './components/system/SimpleDeviceIndicator'
 import { SetupWizard } from './components/setup'
-import { TrayMenu } from './components/tray'
 import Overlay from './Overlay'
 
 const FileUpload = lazy(() => import('./components/upload/FileUpload'))
@@ -210,9 +209,6 @@ export default function App() {
       <Routes>
         {/* Overlay route - standalone, no wrapping */}
         <Route path="/overlay" element={<Overlay />} />
-
-        {/* Tray menu route - custom STYGIAN menu */}
-        <Route path="/tray-menu" element={<TrayMenu />} />
 
         {/* Main app routes - with full layout */}
         <Route path="*" element={

@@ -1203,11 +1203,12 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     let x = monitor_size.width as f64 - menu_width - 20.0;
     let y = monitor_size.height as f64 - menu_height - 60.0; // Extra padding for taskbar
 
-    // Create new tray menu window positioned near system tray
-    let _window = tauri::WebviewWindowBuilder::new(
+    // Create new tray menu window using standalone HTML file
+    // Start hidden to prevent flash during initialization
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         "tray-menu",
-        tauri::WebviewUrl::App("/#/tray-menu".into())
+        tauri::WebviewUrl::App("tray-menu.html".into())
     )
     .title("STYGIAN Menu")
     .inner_size(menu_width, menu_height)
@@ -1218,10 +1219,54 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     .always_on_top(true)
     .skip_taskbar(true)
     .focused(true)
+    .visible(false)  // Start hidden
+    .visible_on_all_workspaces(true)
     .build()
     .map_err(|e| e.to_string())?;
 
+    // Remove window border using Windows API
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetWindowLongW, GWL_EXSTYLE, GWL_STYLE,
+            WS_POPUP, WS_VISIBLE, WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TOOLWINDOW
+        };
+
+        let hwnd = HWND(window.hwnd().map_err(|e| e.to_string())?.0 as isize);
+
+        unsafe {
+            // Set window style to popup only (removes all borders)
+            let _ = SetWindowLongW(hwnd, GWL_STYLE, (WS_POPUP | WS_VISIBLE).0 as i32);
+
+            // Set extended style for layered, topmost window
+            let _ = SetWindowLongW(
+                hwnd,
+                GWL_EXSTYLE,
+                (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW).0 as i32
+            );
+        }
+    }
+
+    // Show window after all styling is applied (prevents flash)
+    let _ = window.show();
+    let _ = window.set_focus();
+
     println!("✓ Custom tray menu window created at position ({}, {})", x, y);
+
+    Ok(())
+}
+
+/// Show the main application window
+#[tauri::command]
+async fn show_main_window(app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.unminimize();
+    }
 
     Ok(())
 }
@@ -1293,6 +1338,7 @@ fn main() {
             is_setup_complete,
             mark_setup_complete,
             show_tray_menu,
+            show_main_window,
             quit_app
         ])
         .run(tauri::generate_context!())

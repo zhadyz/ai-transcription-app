@@ -94,11 +94,6 @@
           ]
         }
       ]
-    },
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false
     }
   }
 }
