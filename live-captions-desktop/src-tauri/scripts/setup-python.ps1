@@ -31,7 +31,8 @@ Write-Host "`n[2/5] Downloading Python $PythonVersion embeddable ($arch)..." -Fo
 Write-Host "URL: $pythonUrl" -ForegroundColor Gray
 try {
     Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip -UseBasicParsing
-    Write-Host "Downloaded: $(((Get-Item $pythonZip).Length / 1MB).ToString('F2')) MB" -ForegroundColor Green
+    $downloadSize = [math]::Round((Get-Item $pythonZip).Length / 1MB, 2)
+    Write-Host "Downloaded: $downloadSize MB" -ForegroundColor Green
 } catch {
     Write-Host "Error downloading Python: $_" -ForegroundColor Red
     exit 1
@@ -101,7 +102,8 @@ if (Test-Path $requirementsFile) {
 Remove-Item "$TargetDir\get-pip.py" -ErrorAction SilentlyContinue
 
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "✓ Python setup complete!" -ForegroundColor Green
+Write-Host "Python setup complete!" -ForegroundColor Green
 Write-Host "Location: $TargetDir" -ForegroundColor Gray
-Write-Host "Size: $(((Get-ChildItem -Recurse $TargetDir | Measure-Object -Property Length -Sum).Sum / 1MB).ToString('F2')) MB" -ForegroundColor Gray
+$sizeInMB = [math]::Round((Get-ChildItem -Recurse $TargetDir | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
+Write-Host "Size: $sizeInMB MB" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
