@@ -158,13 +158,45 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
   /**
    * Update settings and persist to localStorage
    */
-  const updateSettings = useCallback((newSettings: Partial<LiveCaptureSettings>) => {
+  const updateSettings = useCallback(async (newSettings: Partial<LiveCaptureSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       localStorage.setItem('liveCaptureSettings', JSON.stringify(updated));
       return updated;
     });
-  }, []);
+
+    // If capture is active and translation/model settings changed, update backend
+    if (isActive) {
+      const needsUpdate =
+        'translateTo' in newSettings ||
+        'showTranslation' in newSettings ||
+        'modelSize' in newSettings;
+
+      if (needsUpdate) {
+        try {
+          // Get the updated settings values
+          const currentSettings = {
+            ...settings,
+            ...newSettings
+          };
+
+          await invoke('update_capture_config', {
+            translateTo: currentSettings.showTranslation ? currentSettings.translateTo : null,
+            showTranslation: currentSettings.showTranslation,
+            modelSize: currentSettings.modelSize
+          });
+
+          console.log('[LiveCapture] Config updated on backend:', {
+            translateTo: currentSettings.showTranslation ? currentSettings.translateTo : null,
+            showTranslation: currentSettings.showTranslation,
+            modelSize: currentSettings.modelSize
+          });
+        } catch (err) {
+          console.error('[LiveCapture] Failed to update config:', err);
+        }
+      }
+    }
+  }, [isActive, settings]);
 
   /**
    * Listen for caption events from Rust backend

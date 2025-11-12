@@ -38,10 +38,18 @@ struct StatusPayload {
     message: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct ConfigUpdate {
+    translate_to: Option<String>,
+    show_translation: bool,
+    model_size: String,
+}
+
 #[derive(Clone)]
 struct AppState {
     is_capturing: Arc<Mutex<bool>>,
     ws_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<f32>>>>>,
+    config_tx: Arc<Mutex<Option<mpsc::UnboundedSender<ConfigUpdate>>>>,
     log_file: Arc<Mutex<Option<BufWriter<File>>>>,
     log_dir: Arc<Mutex<PathBuf>>,
     discord_webhook: Arc<Mutex<Option<String>>>,
@@ -521,6 +529,10 @@ async fn start_capture(
     let (audio_tx, mut audio_rx) = mpsc::unbounded_channel::<Vec<f32>>();
     *state.ws_tx.lock().unwrap() = Some(audio_tx);
 
+    // Create config update channel
+    let (config_tx, mut config_rx) = mpsc::unbounded_channel::<ConfigUpdate>();
+    *state.config_tx.lock().unwrap() = Some(config_tx);
+
     // Spawn WebSocket task
     let app_handle_ws = app_handle.clone();
     let log_file_clone = state.log_file.clone();
@@ -589,6 +601,37 @@ async fn start_capture(
                         drop(write_guard); // Explicit drop to release lock quickly
                     }
                     println!("[AUDIO_RX] ⚠ Audio receiver loop exited (channel closed)");
+                });
+
+                // Spawn config update listener task
+                let write_clone_config = write.clone();
+                tokio::spawn(async move {
+                    println!("[CONFIG_RX] Config update listener started");
+                    while let Some(config_update) = config_rx.recv().await {
+                        println!("[CONFIG_RX] ✓ Received config update: translate_to={:?}, show_translation={}",
+                            config_update.translate_to, config_update.show_translation);
+
+                        // Send config update to WebSocket
+                        let config_msg = serde_json::json!({
+                            "type": "config",
+                            "translate_to": config_update.translate_to,
+                            "show_translation": config_update.show_translation,
+                            "model_size": config_update.model_size
+                        });
+
+                        let mut write_guard = write_clone_config.lock().await;
+                        match write_guard.send(Message::Text(config_msg.to_string())).await {
+                            Ok(_) => {
+                                println!("[CONFIG_RX] ✓ Sent config update to WebSocket");
+                            }
+                            Err(e) => {
+                                eprintln!("[CONFIG_RX] ❌ Failed to send config to WebSocket: {}", e);
+                                break;
+                            }
+                        }
+                        drop(write_guard);
+                    }
+                    println!("[CONFIG_RX] ⚠ Config update listener exited");
                 });
 
                 // Receive captions
@@ -728,10 +771,43 @@ async fn start_capture(
 }
 
 #[tauri::command]
+async fn update_capture_config(
+    state: State<'_, AppState>,
+    translate_to: Option<String>,
+    show_translation: bool,
+    model_size: String,
+) -> Result<String, String> {
+    let config_tx_guard = state.config_tx.lock().unwrap();
+
+    if let Some(tx) = config_tx_guard.as_ref() {
+        let config = ConfigUpdate {
+            translate_to,
+            show_translation,
+            model_size,
+        };
+
+        println!("[UPDATE_CONFIG] Sending config update: translate_to={:?}, show_translation={}",
+            config.translate_to, config.show_translation);
+
+        if let Err(e) = tx.send(config) {
+            eprintln!("[UPDATE_CONFIG] Failed to send config update: {}", e);
+            return Err("Failed to send config update".to_string());
+        }
+
+        println!("[UPDATE_CONFIG] ✓ Config update sent successfully");
+        Ok("Config updated".to_string())
+    } else {
+        println!("[UPDATE_CONFIG] ⚠ Not currently capturing, config will apply on next start");
+        Ok("Not capturing".to_string())
+    }
+}
+
+#[tauri::command]
 async fn stop_capture(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let mut is_capturing = state.is_capturing.lock().unwrap();
     *is_capturing = false;
     *state.ws_tx.lock().unwrap() = None;
+    *state.config_tx.lock().unwrap() = None;
 
     // Close log file
     if let Some(mut writer) = state.log_file.lock().unwrap().take() {
@@ -1064,6 +1140,7 @@ fn main() {
     let app_state = AppState {
         is_capturing: Arc::new(Mutex::new(false)),
         ws_tx: Arc::new(Mutex::new(None)),
+        config_tx: Arc::new(Mutex::new(None)),
         log_file: Arc::new(Mutex::new(None)),
         log_dir: Arc::new(Mutex::new(PathBuf::new())),
         discord_webhook: Arc::new(Mutex::new(None)),
@@ -1137,6 +1214,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             start_capture,
             stop_capture,
+            update_capture_config,
             open_transcription_folder,
             is_setup_complete,
             mark_setup_complete
