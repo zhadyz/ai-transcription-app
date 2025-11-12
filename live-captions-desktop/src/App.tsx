@@ -1,5 +1,5 @@
 import { HashRouter, Routes, Route } from 'react-router-dom'
-import { lazy, Suspense, useMemo } from 'react'
+import { lazy, Suspense, useMemo, useState, useEffect } from 'react'
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from '@tauri-apps/api/core';
 import { SessionProvider } from './core/SessionContext'
@@ -7,6 +7,7 @@ import { WebSocketProvider } from './core/WebSocketContext'
 import { LiveCaptureProvider, useLiveCapture } from './contexts/LiveCaptureContext'
 import { LiveCapturePanel, CaptionOverlay } from './components/livecapture'
 import { SimpleDeviceIndicator } from './components/system/SimpleDeviceIndicator'
+import { SetupWizard } from './components/setup'
 import Overlay from './Overlay'
 
 const FileUpload = lazy(() => import('./components/upload/FileUpload'))
@@ -155,10 +156,53 @@ function LiveCaptionsDisplay() {
 export default function App() {
   console.log('🎨 [STYGIAN] App component rendering!')
 
+  const [isSetupComplete, setIsSetupComplete] = useState<boolean | null>(null)
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true)
+
   // For Tauri desktop app, backend runs on localhost:8000
   const backendUrl = useMemo(() => 'http://localhost:8000', [])
 
   console.log('🔗 [STYGIAN] Backend URL:', backendUrl)
+
+  // Check if first-launch setup has been completed
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const complete = await invoke<boolean>('is_setup_complete')
+        console.log('🔍 [SETUP] Setup status:', complete)
+        setIsSetupComplete(complete)
+      } catch (error) {
+        console.error('❌ [SETUP] Failed to check setup status:', error)
+        // On error, assume setup not complete
+        setIsSetupComplete(false)
+      } finally {
+        setIsCheckingSetup(false)
+      }
+    }
+
+    checkSetup()
+  }, [])
+
+  const handleSetupComplete = () => {
+    console.log('✅ [SETUP] Setup complete, showing main app')
+    setIsSetupComplete(true)
+  }
+
+  // Show loading while checking setup status
+  if (isCheckingSetup) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center">
+        <div className="text-amber-200 text-sm tracking-[0.2em] uppercase">
+          Loading...
+        </div>
+      </div>
+    )
+  }
+
+  // Show setup wizard if not complete
+  if (!isSetupComplete) {
+    return <SetupWizard onComplete={handleSetupComplete} />
+  }
 
   return (
     <HashRouter>

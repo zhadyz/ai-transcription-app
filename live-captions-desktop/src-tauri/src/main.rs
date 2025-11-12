@@ -1024,6 +1024,42 @@ fn capture_system_audio(state: AppState, device_type: String) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FIRST-LAUNCH SETUP COMMANDS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Check if first-launch setup has been completed
+#[tauri::command]
+fn is_setup_complete(app: AppHandle) -> bool {
+    let config_dir = app.path().app_config_dir()
+        .expect("Failed to get config directory");
+
+    let setup_file = config_dir.join(".setup_complete");
+    setup_file.exists()
+}
+
+/// Mark first-launch setup as complete
+#[tauri::command]
+fn mark_setup_complete(app: AppHandle) -> Result<(), String> {
+    let config_dir = app.path().app_config_dir()
+        .expect("Failed to get config directory");
+
+    // Create config directory if it doesn't exist
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+
+    let setup_file = config_dir.join(".setup_complete");
+
+    // Create the setup marker file
+    fs::write(&setup_file, "1")
+        .map_err(|e| format!("Failed to write setup file: {}", e))?;
+
+    println!("✓ First-launch setup marked as complete");
+    Ok(())
+}
+
 fn main() {
     let app_state = AppState {
         is_capturing: Arc::new(Mutex::new(false)),
@@ -1098,7 +1134,13 @@ fn main() {
         })
         .manage(app_state)
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![start_capture, stop_capture, open_transcription_folder])
+        .invoke_handler(tauri::generate_handler![
+            start_capture,
+            stop_capture,
+            open_transcription_folder,
+            is_setup_complete,
+            mark_setup_complete
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
