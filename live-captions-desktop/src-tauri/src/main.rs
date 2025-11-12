@@ -1028,6 +1028,120 @@ fn capture_system_audio(state: AppState, device_type: String) {
 // FIRST-LAUNCH SETUP COMMANDS
 // ═══════════════════════════════════════════════════════════════════════════
 
+#[derive(Clone, Serialize, Deserialize)]
+struct SystemRequirements {
+    cpu_cores: usize,
+    ram_gb: f64,
+    disk_space_gb: f64,
+    meets_requirements: bool,
+    warnings: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct PythonInfo {
+    installed: bool,
+    version: String,
+    meets_requirements: bool,
+    path: String,
+}
+
+/// Check system requirements (CPU, RAM, disk space)
+#[tauri::command]
+fn check_system_requirements() -> Result<SystemRequirements, String> {
+    use sysinfo::{System, Disks};
+
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let cpu_cores = sys.cpus().len();
+    let ram_gb = sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0);
+
+    // Check disk space
+    let disks = Disks::new_with_refreshed_list();
+    let disk_space_gb = disks.iter()
+        .filter(|disk| disk.mount_point().to_str().unwrap_or("").contains("C:\\") || disk.mount_point().to_str().unwrap_or("") == "/")
+        .map(|disk| disk.available_space() as f64 / (1024.0 * 1024.0 * 1024.0))
+        .next()
+        .unwrap_or(0.0);
+
+    let mut warnings = Vec::new();
+    let mut meets_requirements = true;
+
+    // Minimum requirements: 4 cores, 8GB RAM, 15GB disk
+    if cpu_cores < 4 {
+        warnings.push(format!("CPU cores: {} (recommended: 4+)", cpu_cores));
+        meets_requirements = false;
+    }
+
+    if ram_gb < 8.0 {
+        warnings.push(format!("RAM: {:.1}GB (recommended: 8GB+)", ram_gb));
+        meets_requirements = false;
+    }
+
+    if disk_space_gb < 15.0 {
+        warnings.push(format!("Disk space: {:.1}GB (required: 15GB+)", disk_space_gb));
+        meets_requirements = false;
+    }
+
+    println!("✓ System check: {} cores, {:.1}GB RAM, {:.1}GB disk", cpu_cores, ram_gb, disk_space_gb);
+
+    Ok(SystemRequirements {
+        cpu_cores,
+        ram_gb,
+        disk_space_gb,
+        meets_requirements,
+        warnings,
+    })
+}
+
+/// Check Python installation and version
+#[tauri::command]
+fn check_python_version() -> Result<PythonInfo, String> {
+    let output = Command::new("python")
+        .arg("--version")
+        .output();
+
+    match output {
+        Ok(output) => {
+            let version_str = String::from_utf8_lossy(&output.stdout);
+            let version_str = version_str.trim();
+
+            // Check if version contains "3.11"
+            let meets_requirements = version_str.contains("3.11");
+
+            // Get Python path
+            let path_output = Command::new("python")
+                .arg("-c")
+                .arg("import sys; print(sys.executable)")
+                .output()
+                .ok();
+
+            let path = path_output
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+
+            println!("✓ Python check: {}", version_str);
+
+            Ok(PythonInfo {
+                installed: true,
+                version: version_str.to_string(),
+                meets_requirements,
+                path,
+            })
+        }
+        Err(_) => {
+            Ok(PythonInfo {
+                installed: false,
+                version: "Not installed".to_string(),
+                meets_requirements: false,
+                path: String::new(),
+            })
+        }
+    }
+}
+
 /// Check if first-launch setup has been completed
 #[tauri::command]
 fn is_setup_complete(app: AppHandle) -> bool {
@@ -1058,6 +1172,51 @@ fn mark_setup_complete(app: AppHandle) -> Result<(), String> {
 
     println!("✓ First-launch setup marked as complete");
     Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CUSTOM TRAY MENU - STYGIAN-Themed Window
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Show custom STYGIAN-themed tray menu window
+#[tauri::command]
+async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    // Check if tray menu window already exists
+    if let Some(window) = app.get_webview_window("tray-menu") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    // Create new tray menu window
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        "tray-menu",
+        tauri::WebviewUrl::App("/#/tray-menu".into())
+    )
+    .title("STYGIAN Menu")
+    .inner_size(280.0, 300.0)
+    .resizable(false)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .focused(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    println!("✓ Custom tray menu window created");
+
+    Ok(())
+}
+
+/// Quit the application
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    println!("✓ Quitting application");
+    app.exit(0);
 }
 
 fn main() {
@@ -1092,40 +1251,17 @@ fn main() {
                 }
             });
 
-            // Create system tray
-            let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let start = tauri::menu::MenuItem::with_id(app, "start", "Start Captions", true, None::<&str>)?;
-            let stop = tauri::menu::MenuItem::with_id(app, "stop", "Stop Captions", true, None::<&str>)?;
-
-            let menu = tauri::menu::MenuBuilder::new(app)
-                .item(&start)
-                .item(&stop)
-                .separator()
-                .item(&quit)
-                .build()?;
-
+            // ═══════════════════════════════════════════════════════════════
+            // CUSTOM TRAY ICON - Click handler for STYGIAN menu
+            // ═══════════════════════════════════════════════════════════════
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .on_menu_event(move |app, event| {
-                    match event.id().as_ref() {
-                        "quit" => app.exit(0),
-                        "start" => {
-                            let state_clone = app.state::<AppState>().inner().clone();
-                            tauri::async_runtime::spawn(async move {
-                                // Create a State wrapper for the cloned state
-                                // Note: We'll need to refactor the functions to accept AppState directly
-                                // For now, just set the is_capturing flag
-                                *state_clone.is_capturing.lock().unwrap() = true;
-                            });
-                        }
-                        "stop" => {
-                            let state_clone = app.state::<AppState>().inner().clone();
-                            tauri::async_runtime::spawn(async move {
-                                *state_clone.is_capturing.lock().unwrap() = false;
-                            });
-                        }
-                        _ => {}
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                        let app = tray.app_handle();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = show_tray_menu(app).await;
+                        });
                     }
                 })
                 .build(app)?;
@@ -1138,8 +1274,12 @@ fn main() {
             start_capture,
             stop_capture,
             open_transcription_folder,
+            check_system_requirements,
+            check_python_version,
             is_setup_complete,
-            mark_setup_complete
+            mark_setup_complete,
+            show_tray_menu,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

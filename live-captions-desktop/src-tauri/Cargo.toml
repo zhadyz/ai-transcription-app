@@ -36,6 +36,9 @@ which = "5.0"
 # Date/time for timestamps
 chrono = "0.4"
 
+# System information for setup validation
+sysinfo = "0.30"
+
 # Windows API for click-through overlay and WASAPI
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [

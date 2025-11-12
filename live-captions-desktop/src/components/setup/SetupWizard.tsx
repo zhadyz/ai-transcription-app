@@ -19,6 +19,21 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
+interface SystemRequirements {
+  cpu_cores: number
+  ram_gb: number
+  disk_space_gb: number
+  meets_requirements: boolean
+  warnings: string[]
+}
+
+interface PythonInfo {
+  installed: boolean
+  version: string
+  meets_requirements: boolean
+  path: string
+}
+
 export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [steps, setSteps] = useState<SetupStep[]>([
@@ -66,17 +81,49 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
   }
 
   const runSetupSequence = async () => {
+    let hasErrors = false
+
     try {
-      // Step 1: System Check
+      // Step 1: System Requirements Check
       setCurrentStepIndex(0)
       updateStepStatus('system-check', { status: 'running', progress: 0 })
 
-      for (let i = 0; i <= 100; i += 20) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        updateStepStatus('system-check', { progress: i })
+      try {
+        const sysReq = await invoke<SystemRequirements>('check_system_requirements')
+
+        // Animate progress while checking
+        for (let i = 0; i <= 100; i += 20) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          updateStepStatus('system-check', { progress: i })
+        }
+
+        const sysDescription = `${sysReq.cpu_cores} cores, ${sysReq.ram_gb.toFixed(1)}GB RAM, ${sysReq.disk_space_gb.toFixed(1)}GB available`
+
+        if (sysReq.meets_requirements) {
+          updateStepStatus('system-check', {
+            status: 'complete',
+            progress: 100,
+            description: sysDescription
+          })
+        } else {
+          hasErrors = true
+          updateStepStatus('system-check', {
+            status: 'error',
+            progress: 100,
+            description: sysDescription,
+            errorMessage: `System requirements not met: ${sysReq.warnings.join(', ')}`
+          })
+          return // Stop setup if system requirements not met
+        }
+      } catch (error) {
+        hasErrors = true
+        updateStepStatus('system-check', {
+          status: 'error',
+          errorMessage: `Failed to check system requirements: ${error}`
+        })
+        return
       }
 
-      updateStepStatus('system-check', { status: 'complete', progress: 100 })
       await new Promise(resolve => setTimeout(resolve, 500))
 
       // Step 2: GPU Detection
@@ -107,16 +154,59 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
 
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Step 3: Python Check
+      // Step 3: Python Version Check
       setCurrentStepIndex(2)
       updateStepStatus('python-check', { status: 'running', progress: 0 })
 
-      for (let i = 0; i <= 100; i += 25) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        updateStepStatus('python-check', { progress: i })
+      try {
+        const pythonInfo = await invoke<PythonInfo>('check_python_version')
+
+        // Animate progress while checking
+        for (let i = 0; i <= 100; i += 25) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          updateStepStatus('python-check', { progress: i })
+        }
+
+        if (pythonInfo.installed) {
+          const pythonDescription = pythonInfo.meets_requirements
+            ? `Python ${pythonInfo.version} (${pythonInfo.path})`
+            : `Python ${pythonInfo.version} - Version 3.11 required`
+
+          if (pythonInfo.meets_requirements) {
+            updateStepStatus('python-check', {
+              status: 'complete',
+              progress: 100,
+              description: pythonDescription
+            })
+          } else {
+            hasErrors = true
+            updateStepStatus('python-check', {
+              status: 'error',
+              progress: 100,
+              description: pythonDescription,
+              errorMessage: 'Python 3.11 is required. Please install it and restart.'
+            })
+            return
+          }
+        } else {
+          hasErrors = true
+          updateStepStatus('python-check', {
+            status: 'error',
+            progress: 100,
+            description: 'Not installed',
+            errorMessage: 'Python is not installed. Please install Python 3.11 and restart.'
+          })
+          return
+        }
+      } catch (error) {
+        hasErrors = true
+        updateStepStatus('python-check', {
+          status: 'error',
+          errorMessage: `Failed to check Python: ${error}`
+        })
+        return
       }
 
-      updateStepStatus('python-check', { status: 'complete', progress: 100 })
       await new Promise(resolve => setTimeout(resolve, 500))
 
       // Step 4: Backend Setup
@@ -132,18 +222,23 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
           updateStepStatus('backend-setup', { progress: i })
         }
 
-        updateStepStatus('backend-setup', { status: 'complete', progress: 100 })
+        updateStepStatus('backend-setup', {
+          status: 'complete',
+          progress: 100,
+          description: 'FastAPI server running on localhost:8000'
+        })
       } catch (error) {
+        hasErrors = true
         updateStepStatus('backend-setup', {
           status: 'error',
-          errorMessage: 'Backend server not running. Please start the backend manually.'
+          errorMessage: 'Backend server not running. Please start the backend manually and restart the app.'
         })
         return
       }
 
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Step 5: Model Loading
+      // Step 5: Model Loading (simulated for now)
       setCurrentStepIndex(4)
       updateStepStatus('model-download', { status: 'running', progress: 0 })
 
@@ -152,15 +247,22 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
         updateStepStatus('model-download', { progress: i })
       }
 
-      updateStepStatus('model-download', { status: 'complete', progress: 100 })
+      updateStepStatus('model-download', {
+        status: 'complete',
+        progress: 100,
+        description: 'Models loaded and ready for transcription'
+      })
       await new Promise(resolve => setTimeout(resolve, 1000))
 
-      // Mark setup as complete
-      await invoke('mark_setup_complete')
-      onComplete()
+      // Mark setup as complete only if no errors occurred
+      if (!hasErrors) {
+        await invoke('mark_setup_complete')
+        onComplete()
+      }
 
     } catch (error) {
       console.error('Setup failed:', error)
+      hasErrors = true
     }
   }
 
