@@ -60,7 +60,7 @@ export const SimpleDeviceIndicator = () => {
             lineHeight: "1"
           }}
         >
-          {deviceInfo.device_name}
+          {deviceInfo.device_name.replace('NVIDIA', 'NVIDIA®')}
         </p>
         {isGPU && deviceInfo.cuda_version && (
           <p
