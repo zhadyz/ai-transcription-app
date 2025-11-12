@@ -346,6 +346,14 @@ MIT License. See LICENSE for full terms.
 
 ---
 
+## Trademarks and Copyright
+
+NVIDIA, CUDA, and GeForce RTX are trademarks and/or registered trademarks of NVIDIA Corporation in the United States and other countries.
+
+All other trademarks are property of their respective owners.
+
+---
+
 ## Technical References
 
 ### Core Technologies
