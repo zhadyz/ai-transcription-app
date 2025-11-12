@@ -1,19 +1,20 @@
 """
 ═══════════════════════════════════════════════════════════════════════════
-NLLB-200 TRANSLATION SERVICE
+NLLB-200 TRANSLATION SERVICE - CTRANSLATE2 (GPU-ACCELERATED)
 ═══════════════════════════════════════════════════════════════════════════
 
-Real-time translation using Meta's NLLB-200 (No Language Left Behind) model.
+Real-time translation using Meta's NLLB-200 with CTranslate2 backend.
 - 200+ languages supported
-- 85-92% accuracy (near-API quality)
+- GPU acceleration via CTranslate2 (works with RTX 5080!)
+- 10-20x faster than PyTorch CPU
 - 100% free and open source
-- GPU accelerated
 """
 
 import logging
-import torch
+import ctranslate2
+from transformers import AutoTokenizer
 from typing import Optional
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -47,32 +48,49 @@ LANGUAGE_CODES = {
 
 
 class NLLBTranslationService:
-    """NLLB-200 translation service for real-time caption translation."""
+    """NLLB-200 translation service using CTranslate2 for GPU acceleration."""
 
     def __init__(self, model_size: str = "1.3B"):
-        # Force CPU for NLLB due to CUDA compute capability mismatch
-        # Whisper uses CUDA, but NLLB has compatibility issues with this GPU
-        self.device = "cpu"
-        model_name = f"facebook/nllb-200-distilled-{model_size}"
+        # Use pre-converted CTranslate2 model (FP16 for GPU speed)
+        model_id = f"JustFrederik/nllb-200-distilled-{model_size}-ct2-float16"
 
-        logger.info(f"Loading NLLB-200 translation model ({model_size}) on {self.device}...")
+        logger.info(f"Loading NLLB-200-CT2 translation model ({model_size})...")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
+        # Download model if not cached
+        from huggingface_hub import snapshot_download
+        model_path = snapshot_download(
+            repo_id=model_id,
             cache_dir="./models",
-            use_safetensors=True
+            local_files_only=False
         )
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(
-            model_name,
-            cache_dir="./models",
-            torch_dtype=torch.float32,  # CPU requires float32
-            use_safetensors=True
-        ).to(self.device)
+        logger.info(f"Model downloaded to: {model_path}")
 
-        logger.info(f"✓ NLLB-200 ({model_size}) loaded on {self.device}")
-        
-        if self.device == "cuda":
-            self.model.eval()
+        # Auto-detect device (CTranslate2 will use CUDA if available)
+        device_count = ctranslate2.get_cuda_device_count()
+        if device_count > 0:
+            self.device = "cuda"
+            self.device_index = 0
+            logger.info(f"✓ GPU acceleration enabled ({device_count} CUDA device(s) available)")
+        else:
+            self.device = "cpu"
+            self.device_index = 0
+            logger.info("Using CPU (no CUDA devices found)")
+
+        # Load CTranslate2 model
+        self.translator = ctranslate2.Translator(
+            model_path,
+            device=self.device,
+            device_index=self.device_index,
+            compute_type="float16" if self.device == "cuda" else "float32",
+        )
+
+        # Load tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_id,
+            cache_dir="./models"
+        )
+
+        logger.info(f"✓ NLLB-200-CT2 ({model_size}) loaded on {self.device}")
 
     def get_language_code(self, lang: str) -> str:
         return LANGUAGE_CODES.get(lang.lower(), "eng_Latn")
@@ -84,20 +102,28 @@ class NLLBTranslationService:
         try:
             src_code = self.get_language_code(source_lang)
             tgt_code = self.get_language_code(target_lang)
-            
+
+            # Tokenize input
             self.tokenizer.src_lang = src_code
-            inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512).to(self.device)
+            tokens = self.tokenizer.convert_ids_to_tokens(
+                self.tokenizer.encode(text)
+            )
 
-            with torch.no_grad():
-                translated = self.model.generate(
-                    **inputs,
-                    forced_bos_token_id=self.tokenizer.convert_tokens_to_ids(tgt_code),
-                    max_length=512,
-                    num_beams=4,
-                    early_stopping=True
-                )
+            # Translate using CTranslate2
+            results = self.translator.translate_batch(
+                [tokens],
+                target_prefix=[[tgt_code]],
+                beam_size=1,  # Greedy decoding for speed
+                max_decoding_length=512,
+            )
 
-            result = self.tokenizer.batch_decode(translated, skip_special_tokens=True)[0]
+            # Decode result
+            output_tokens = results[0].hypotheses[0]
+            result = self.tokenizer.decode(
+                self.tokenizer.convert_tokens_to_ids(output_tokens),
+                skip_special_tokens=True
+            )
+
             logger.debug(f"Translated [{source_lang}→{target_lang}]: \"{text}\" → \"{result}\"")
             return result
 

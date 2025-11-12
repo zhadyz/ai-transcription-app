@@ -9,6 +9,11 @@ interface Caption {
   timestamp: number;
 }
 
+interface CaptionPair {
+  caption: Caption;
+  translation: Caption | null;
+}
+
 export default function Overlay() {
   console.log('[Overlay] 🚀 COMPONENT RENDERING - Component has mounted!');
   // Also log to Rust console
@@ -16,7 +21,8 @@ export default function Overlay() {
     console.warn('[Overlay] OVERLAY COMPONENT IS ALIVE - Tauri detected');
   }
 
-  const [captions, setCaptions] = useState<Caption[]>([]);
+  const [currentCaption, setCurrentCaption] = useState<Caption | null>(null);
+  const [currentTranslation, setCurrentTranslation] = useState<Caption | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -30,37 +36,38 @@ export default function Overlay() {
     if (html) html.style.backgroundColor = 'transparent';
 
 
-    console.log('[Overlay] Setting up caption listener...');
+    console.log('[Overlay] Setting up caption and translation listeners...');
     setIsLoaded(true);
 
-    // Listen for caption events from Rust on THIS webview window
-    // IMPORTANT: Use getCurrentWebviewWindow() instead of getCurrentWindow() in Tauri v2
+    // Listen for caption and translation events from Rust
     const overlayWebview = getCurrentWebviewWindow();
     console.log('[Overlay] Webview label:', overlayWebview.label);
 
-    // Set up event listener for caption events
+    // Listen for caption events
     const unlistenCaptions = overlayWebview.listen<Caption>("caption", (event) => {
       console.log('[Overlay] ✓ Received caption event:', event.payload);
-      const newCaption = event.payload;
+      setCurrentCaption(event.payload);
+      setCurrentTranslation(null); // Clear previous translation
 
-      setCaptions((prev) => {
-        // Keep only last 3 captions
-        const updated = [newCaption, ...prev].slice(0, 3);
-        console.log('[Overlay] Updated captions count:', updated.length);
-        return updated;
-      });
-
-      // Remove caption after 10 seconds
+      // Clear caption after 10 seconds
       setTimeout(() => {
-        setCaptions((prev) => prev.filter((c) => c.timestamp !== newCaption.timestamp));
+        setCurrentCaption(null);
+        setCurrentTranslation(null);
       }, 10000);
     });
 
-    console.log('[Overlay] Caption listener registered successfully');
+    // Listen for translation events
+    const unlistenTranslation = overlayWebview.listen<Caption>("translation", (event) => {
+      console.log('[Overlay] ✓ Received translation event:', event.payload);
+      setCurrentTranslation(event.payload);
+    });
+
+    console.log('[Overlay] Caption and translation listeners registered successfully');
 
     return () => {
-      console.log('[Overlay] Cleaning up caption listener...');
+      console.log('[Overlay] Cleaning up listeners...');
       unlistenCaptions.then((fn) => fn());
+      unlistenTranslation.then((fn) => fn());
     };
   }, []);
 
@@ -73,9 +80,9 @@ export default function Overlay() {
       }}
     >
       <AnimatePresence mode="wait">
-        {captions.length > 0 && (
+        {currentCaption && (
           <motion.div
-            key={captions[0].timestamp}
+            key={currentCaption.timestamp}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
@@ -86,7 +93,7 @@ export default function Overlay() {
               style={{
                 backgroundColor: 'rgba(0, 0, 0, 0.85)',
                 color: '#FFFFFF',
-                padding: '12px 24px',
+                padding: '16px 28px',
                 fontSize: '24px',
                 fontWeight: '600',
                 textAlign: 'center',
@@ -95,9 +102,24 @@ export default function Overlay() {
                 textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9)',
                 maxWidth: '90vw',
                 wordWrap: 'break-word',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
               }}
             >
-              {captions[0].text}
+              <div>{currentCaption.text}</div>
+              {currentTranslation && (
+                <div
+                  style={{
+                    color: '#C084FC',
+                    fontSize: '22px',
+                    fontWeight: '500',
+                    marginTop: '4px',
+                  }}
+                >
+                  {currentTranslation.text}
+                </div>
+              )}
             </div>
           </motion.div>
         )}

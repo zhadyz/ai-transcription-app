@@ -666,10 +666,10 @@ async fn start_capture(
 
                                         println!("🌐 Translation: {}", translation.text);
 
-                                        // Emit translation to overlay (replaces caption if showTranslation is enabled)
+                                        // Emit translation as separate event type
                                         if let Some(overlay) = app_handle_ws.get_webview_window("overlay") {
                                             println!("[EMIT] Emitting translation to overlay window...");
-                                            match overlay.emit("caption", &translation) {
+                                            match overlay.emit("translation", &translation) {
                                                 Ok(_) => println!("✓ Translation emitted to overlay window successfully"),
                                                 Err(e) => eprintln!("❌ Failed to emit translation to overlay: {}", e),
                                             }

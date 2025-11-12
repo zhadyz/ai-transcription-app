@@ -8,8 +8,16 @@
  * - Responsive layout
  */
 import faviconIcon from '../../assets/favicon.ico'
+import { open } from '@tauri-apps/plugin-shell'
 
 export const Footer = () => {
+  const openUrl = async (url: string) => {
+    try {
+      await open(url)
+    } catch (error) {
+      console.error('Failed to open URL:', error)
+    }
+  }
   return (
     <footer role="contentinfo" className="mt-auto border-t border-white/10">
       <div className="max-w-6xl mx-auto px-6 py-3 ml-80">
@@ -36,11 +44,9 @@ export const Footer = () => {
           </div>
 
           <div className="flex items-center gap-6">
-            <a
-              href="https://github.com/zhadyz/ai-transcription-app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.15em] transition-all duration-300 group"
+            <button
+              onClick={() => openUrl('https://github.com/zhadyz/ai-transcription-app/')}
+              className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.15em] transition-all duration-300 group cursor-pointer"
               style={{ color: "rgba(200, 140, 35, 0.6)" }}
               aria-label="Visit GitHub repository"
             >
@@ -62,13 +68,13 @@ export const Footer = () => {
               >
                 GitHub
               </span>
-            </a>
+            </button>
           </div>
 
           <div className="flex items-center gap-5">
-            <a
-              href="#"
-              className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition-all duration-300 group"
+            <button
+              onClick={() => openUrl('https://onyxlab.ai/terms')}
+              className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition-all duration-300 group cursor-pointer"
               style={{ color: "rgba(200, 140, 35, 0.6)" }}
               aria-label="View Terms of Service"
             >
@@ -91,10 +97,10 @@ export const Footer = () => {
               >
                 Terms
               </span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition-all duration-300 group"
+            </button>
+            <button
+              onClick={() => openUrl('https://onyxlab.ai/privacy')}
+              className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition-all duration-300 group cursor-pointer"
               style={{ color: "rgba(200, 140, 35, 0.6)" }}
               aria-label="View Privacy Policy"
             >
@@ -117,7 +123,7 @@ export const Footer = () => {
               >
                 Privacy
               </span>
-            </a>
+            </button>
           </div>
         </div>
       </div>

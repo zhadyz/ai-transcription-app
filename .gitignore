@@ -127,4 +127,13 @@ nul
 # ============================================
 # Auto-generated User Files
 # ============================================
-APP-INFO.txtlive-captions-desktop/src-tauri/target/
+APP-INFO.txt
+live-captions-desktop/src-tauri/target/
+
+# ============================================
+# Test & Development Files
+# ============================================
+*_backup.py
+test_*.py
+stress_test.py
+convert_*.py

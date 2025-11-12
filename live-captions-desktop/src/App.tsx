@@ -4,9 +4,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from '@tauri-apps/api/core';
 import { SessionProvider } from './core/SessionContext'
 import { WebSocketProvider } from './core/WebSocketContext'
-import { DeviceIndicator } from './components/system/DeviceIndicator'
 import { LiveCaptureProvider, useLiveCapture } from './contexts/LiveCaptureContext'
 import { LiveCapturePanel, CaptionOverlay } from './components/livecapture'
+import { SimpleDeviceIndicator } from './components/system/SimpleDeviceIndicator'
 import Overlay from './Overlay'
 
 const FileUpload = lazy(() => import('./components/upload/FileUpload'))
@@ -57,6 +57,17 @@ function TitleBar() {
         data-tauri-drag-region
         className="flex items-center ml-4 flex-1 h-full select-none"
       >
+        {/* Glowing Circle - Sun Icon */}
+        <div
+          className="mr-3"
+          style={{
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            background: "#ff8c00",
+            boxShadow: "0 0 20px rgba(255, 140, 0, 1), 0 0 30px rgba(255, 100, 0, 0.9), 0 0 40px rgba(200, 80, 0, 0.8), 0 0 50px rgba(180, 60, 0, 0.6)",
+          }}
+        />
         <span
           className="text-base font-light tracking-[0.3em] uppercase"
           style={{
@@ -165,10 +176,22 @@ export default function App() {
                   {/* STYGIAN Custom Title Bar */}
                   <TitleBar />
 
+                  {/* Device Indicator - Fixed Top Right */}
+                  <div
+                    style={{
+                      position: "fixed",
+                      top: "56px",
+                      right: "24px",
+                      zIndex: 9999,
+                      pointerEvents: "none"
+                    }}
+                  >
+                    <SimpleDeviceIndicator />
+                  </div>
+
                   {/* Main content area with web application */}
                   <div className="flex-1 relative overflow-y-auto">
                     <BackgroundMedia />
-                    <DeviceIndicator />
 
                     <LiveCapturePanel />
                     <LiveCaptionsDisplay />

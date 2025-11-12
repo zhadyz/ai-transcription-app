@@ -78,7 +78,8 @@
             "core:window:allow-toggle-maximize",
             "core:event:allow-listen",
             "core:event:allow-emit",
-            "core:event:allow-emit-to"
+            "core:event:allow-emit-to",
+            "shell:allow-open"
           ]
         },
         {
