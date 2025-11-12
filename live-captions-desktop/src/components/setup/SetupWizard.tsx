@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
+import { useBackendUrl } from '../../hooks/useBackendUrl'
 
 interface SetupStep {
   id: string
@@ -28,6 +29,7 @@ interface SystemRequirements {
 }
 
 export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
+  const { backendUrl, isReady: backendReady } = useBackendUrl()
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [steps, setSteps] = useState<SetupStep[]>([
     {
@@ -109,8 +111,29 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
       setCurrentStepIndex(1)
       updateStepStatus('backend-setup', { status: 'running', progress: 0 })
 
+      // Wait for backend to be ready
+      if (!backendReady || !backendUrl) {
+        updateStepStatus('backend-setup', {
+          status: 'running',
+          description: 'Waiting for embedded Python backend to start...'
+        })
+        // Wait for backend to become ready (max 30 seconds)
+        const startTime = Date.now()
+        while (!backendReady || !backendUrl) {
+          if (Date.now() - startTime > 30000) {
+            hasErrors = true
+            updateStepStatus('backend-setup', {
+              status: 'error',
+              errorMessage: 'Backend failed to start after 30 seconds'
+            })
+            return
+          }
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      }
+
       try {
-        await fetch('http://localhost:8000/health')
+        await fetch(`${backendUrl}/health`)
 
         for (let i = 0; i <= 100; i += 20) {
           await new Promise(resolve => setTimeout(resolve, 100))
@@ -120,13 +143,13 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
         updateStepStatus('backend-setup', {
           status: 'complete',
           progress: 100,
-          description: 'Connected to Docker backend on localhost:8000'
+          description: `Connected to embedded backend at ${backendUrl}`
         })
       } catch (error) {
         hasErrors = true
         updateStepStatus('backend-setup', {
           status: 'error',
-          errorMessage: 'Backend not running. Please run: docker-compose up -d'
+          errorMessage: `Backend health check failed: ${error}`
         })
         return
       }
@@ -138,7 +161,7 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
       updateStepStatus('gpu-detection', { status: 'running', progress: 0 })
 
       try {
-        const gpuInfo = await fetch('http://localhost:8000/system/device-info')
+        const gpuInfo = await fetch(`${backendUrl}/system/device-info`)
           .then(res => res.json())
 
         for (let i = 0; i <= 100; i += 10) {

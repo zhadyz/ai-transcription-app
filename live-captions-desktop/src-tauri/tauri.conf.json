@@ -1,10 +1,10 @@
 {
-  "productName": "Stygian Captions",
+  "productName": "Stygian",
   "version": "1.0.1",
   "identifier": "com.stygian.captions",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && powershell -ExecutionPolicy Bypass -File src-tauri/scripts/setup-python.ps1",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
@@ -20,10 +20,17 @@
       "icons/icon.icns",
       "icons/stygian.ico"
     ],
+    "resources": [
+      "python-embed/**",
+      "../backend/**"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "wix": {
+        "language": "en-US"
+      }
     }
   },
   "app": {

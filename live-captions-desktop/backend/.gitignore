@@ -1,0 +1,26 @@
+# AI Models (downloaded on first run, not bundled)
+models/
+
+# Logs
+logs/
+*.log
+
+# Build artifacts
+.pip_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Database files
+db/*.db
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+env/
+.venv/

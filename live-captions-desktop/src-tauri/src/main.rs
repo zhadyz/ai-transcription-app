@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release mode
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backend_manager;
+
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -18,6 +20,7 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
 use chrono::Local;
 use sysinfo::{System, Disks};
+use backend_manager::BackendManager;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{HWND, COLORREF};
@@ -63,6 +66,7 @@ struct AppState {
     log_file: Arc<Mutex<Option<BufWriter<File>>>>,
     log_dir: Arc<Mutex<PathBuf>>,
     discord_webhook: Arc<Mutex<Option<String>>>,
+    backend_url: Arc<Mutex<String>>,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -294,7 +298,8 @@ fn write_caption_to_log(
 // SMART LAUNCHER - Docker Detection & Auto-Start
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Check if Docker Desktop is running
+/// Check if Docker Desktop is running (DEPRECATED - kept for backwards compatibility)
+#[allow(dead_code)]
 fn check_docker_running() -> bool {
     println!("🔍 Checking if Docker is running...");
 
@@ -324,7 +329,8 @@ fn check_docker_running() -> bool {
     false
 }
 
-/// Check if backend container is running
+/// Check if backend container is running (DEPRECATED)
+#[allow(dead_code)]
 fn check_backend_container() -> bool {
     println!("🔍 Checking if backend container is running...");
 
@@ -340,7 +346,8 @@ fn check_backend_container() -> bool {
     false
 }
 
-/// Check backend health endpoint
+/// Check backend health endpoint (DEPRECATED)
+#[allow(dead_code)]
 async fn check_backend_health() -> bool {
     match reqwest::get("http://localhost:8000/health").await {
         Ok(response) => response.status().is_success(),
@@ -348,7 +355,15 @@ async fn check_backend_health() -> bool {
     }
 }
 
-/// Start Docker backend using docker-compose
+/// Get the backend URL (dynamic port from backend manager)
+#[tauri::command]
+fn get_backend_url(state: State<'_, AppState>) -> String {
+    let url = state.backend_url.lock().unwrap();
+    url.clone()
+}
+
+/// Start Docker backend using docker-compose (DEPRECATED)
+#[allow(dead_code)]
 async fn start_docker_backend(project_dir: &str) -> Result<(), String> {
     println!("🚀 Starting Docker backend...");
 
@@ -367,7 +382,8 @@ async fn start_docker_backend(project_dir: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Initialize backend - check status, auto-start if needed, wait for health
+/// Initialize backend - check status, auto-start if needed, wait for health (DEPRECATED)
+#[allow(dead_code)]
 async fn initialize_backend(app_handle: AppHandle) -> Result<(), String> {
     // Emit status: Checking Docker
     let _ = app_handle.emit("status", StatusPayload {
@@ -548,6 +564,13 @@ async fn start_capture(
     let log_file_clone = state.log_file.clone();
     let log_dir_clone = state.log_dir.clone();
     let discord_webhook_clone = state.discord_webhook.clone();
+
+    // Get backend URL from state
+    let backend_url = {
+        let url = state.backend_url.lock().unwrap();
+        url.clone()
+    };
+
     let task_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -556,7 +579,9 @@ async fn start_capture(
 
     tokio::spawn(async move {
         println!("[WS_TASK_{}] Task started, connecting...", task_id);
-        match connect_async("ws://localhost:8000/ws/realtime").await {
+        let ws_url = backend_url.replace("http://", "ws://") + "/ws/realtime";
+        println!("[WS_TASK_{}] WebSocket URL: {}", task_id, ws_url);
+        match connect_async(&ws_url).await {
             Ok((ws_stream, _)) => {
                 println!("[WS_TASK_{}] ✓ Connected to WebSocket", task_id);
 
@@ -1230,6 +1255,7 @@ fn main() {
         log_file: Arc::new(Mutex::new(None)),
         log_dir: Arc::new(Mutex::new(PathBuf::new())),
         discord_webhook: Arc::new(Mutex::new(None)),
+        backend_url: Arc::new(Mutex::new(String::from("http://127.0.0.1:8000"))), // Default, updated on startup
     };
 
     tauri::Builder::default()
@@ -1245,13 +1271,52 @@ fn main() {
             }
 
             // ═══════════════════════════════════════════════════════════════
-            // SMART LAUNCHER - Initialize backend on startup
+            // EMBEDDED PYTHON BACKEND - Initialize on startup
             // ═══════════════════════════════════════════════════════════════
             let app_handle = app.app_handle().clone();
+            let state = app.state::<AppState>();
+            let backend_url_arc = state.backend_url.clone();
+
             tauri::async_runtime::spawn(async move {
-                match initialize_backend(app_handle).await {
-                    Ok(_) => println!("✓ Smart Launcher: Backend initialized successfully"),
-                    Err(e) => eprintln!("❌ Smart Launcher: Backend initialization failed: {}", e),
+                println!("🚀 Starting embedded Python backend...");
+
+                match BackendManager::new(&app_handle).await {
+                    Ok(manager) => {
+                        let url = manager.get_backend_url();
+                        println!("✓ Backend initialized successfully at: {}", url);
+
+                        // Update state with backend URL
+                        *backend_url_arc.lock().unwrap() = url.clone();
+
+                        // Emit ready status to frontend
+                        let _ = app_handle.emit("backend-status", serde_json::json!({
+                            "status": "ready",
+                            "url": url
+                        }));
+
+                        // Store backend manager in app state for cleanup
+                        app_handle.manage(Arc::new(Mutex::new(manager)));
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Backend initialization failed: {}", e);
+
+                        // Emit error status to frontend
+                        let _ = app_handle.emit("backend-status", serde_json::json!({
+                            "status": "error",
+                            "error": e
+                        }));
+
+                        // Show error dialog to user
+                        use tauri::Manager;
+                        if let Some(main_window) = app_handle.get_webview_window("main") {
+                            let _ = tauri::async_runtime::block_on(async {
+                                main_window.eval(&format!(
+                                    "alert('Backend initialization failed:\\n\\n{}\\n\\nThe application may not work correctly.');",
+                                    e.replace("'", "\\'")
+                                ))
+                            });
+                        }
+                    }
                 }
             });
 
@@ -1304,8 +1369,18 @@ fn main() {
             open_transcription_folder,
             is_setup_complete,
             mark_setup_complete,
-            check_system_requirements
+            check_system_requirements,
+            get_backend_url
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Cleanup backend on app exit
+                if let Some(manager_state) = window.app_handle().try_state::<Arc<Mutex<BackendManager>>>() {
+                    let mut manager = manager_state.lock().unwrap();
+                    manager.shutdown();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
