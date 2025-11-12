@@ -86,11 +86,62 @@ async def lifespan(app: FastAPI):
 
     try:
         # Load translation service (loads model on init)
-        await asyncio.to_thread(get_translation_service)
+        translation_service = await asyncio.to_thread(get_translation_service)
         translation_time = time.time() - translation_preload_start
         logger.info(f"Translation model preloaded successfully in {translation_time:.2f}s")
     except Exception as e:
         logger.error(f"Failed to preload translation model: {e}. Will load on first request.", exc_info=True)
+        translation_service = None
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # WARM-UP INFERENCE - Eliminate cold start on first request
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("🔥 Starting model warm-up with test inference...")
+    total_warmup_start = time.time()
+
+    # Warm up Whisper transcription (realtime service)
+    try:
+        import numpy as np
+        from app.services.realtime_transcription_service import get_realtime_service
+
+        logger.info("  → Warming up Whisper with 1-second silent audio...")
+        warmup_start = time.time()
+
+        # Create 1 second of silent audio at 16kHz (Whisper's input rate)
+        dummy_audio = np.zeros(16000, dtype=np.float32)
+
+        # Get realtime service and run dummy transcription to warm up CUDA/model
+        realtime_service = await asyncio.to_thread(get_realtime_service)
+        result = await realtime_service.transcribe_chunk(
+            audio=dummy_audio,
+            language="en"
+        )
+
+        warmup_time = time.time() - warmup_start
+        logger.info(f"  ✓ Whisper warm-up complete in {warmup_time:.2f}s (CUDA/JIT initialized)")
+    except Exception as e:
+        logger.warning(f"  ⚠ Whisper warm-up failed: {e}. First request may be slower.")
+
+    # Warm up Translation
+    if translation_service:
+        try:
+            logger.info("  → Warming up NLLB translation with test sentence...")
+            warmup_start = time.time()
+
+            # Run dummy translation to warm up model
+            test_result = await translation_service.translate(
+                text="Hello world",
+                source_lang="en",
+                target_lang="es"
+            )
+
+            warmup_time = time.time() - warmup_start
+            logger.info(f"  ✓ Translation warm-up complete in {warmup_time:.2f}s (result: '{test_result}')")
+        except Exception as e:
+            logger.warning(f"  ⚠ Translation warm-up failed: {e}. First request may be slower.")
+
+    total_warmup = time.time() - total_warmup_start
+    logger.info(f"🔥 Model warm-up complete in {total_warmup:.2f}s - Ready for blazing fast inference!")
 
     # Start background cleanup task
     cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
