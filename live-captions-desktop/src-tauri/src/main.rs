@@ -1197,7 +1197,7 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
 
     let monitor_size = monitor.size();
     let menu_width = 280.0;
-    let menu_height = 300.0;
+    let menu_height = 220.0; // Fit all menu items
 
     // Position at bottom-right corner with padding
     let x = monitor_size.width as f64 - menu_width - 20.0;
@@ -1229,8 +1229,9 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::{
-            SetWindowLongW, GWL_EXSTYLE, GWL_STYLE,
-            WS_POPUP, WS_VISIBLE, WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TOOLWINDOW
+            SetWindowLongW, SetWindowPos, GWL_EXSTYLE, GWL_STYLE,
+            WS_POPUP, WS_VISIBLE, WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TOOLWINDOW,
+            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, HWND_TOPMOST
         };
 
         let hwnd = HWND(window.hwnd().map_err(|e| e.to_string())?.0 as isize);
@@ -1245,12 +1246,24 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
                 GWL_EXSTYLE,
                 (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW).0 as i32
             );
+
+            // Force window to update with new styles
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0, 0, 0, 0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
+            );
         }
     }
 
-    // Show window after all styling is applied (prevents flash)
-    let _ = window.show();
-    let _ = window.set_focus();
+    // Wait a tiny bit for page to load, then show (prevents flash)
+    let window_clone = window.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let _ = window_clone.show();
+        let _ = window_clone.set_focus();
+    });
 
     println!("✓ Custom tray menu window created at position ({}, {})", x, y);
 
