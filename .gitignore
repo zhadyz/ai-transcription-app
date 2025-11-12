@@ -42,6 +42,7 @@ frontend/out/
 # Block ENTIRE models directory (484MB+)
 backend/models/
 !backend/models/.gitkeep
+live-captions-desktop/src-tauri/target/debug
 
 # Block ENTIRE storage directory
 backend/storage/
@@ -63,6 +64,7 @@ lt-data/
 *.pth
 *.onnx
 *.safetensors
+*.pdb
 
 # ============================================
 # Media Files (Test files)
