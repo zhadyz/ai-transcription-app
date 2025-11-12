@@ -1190,14 +1190,28 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    // Create new tray menu window
+    // Get primary monitor to calculate position near system tray (bottom-right)
+    let monitor = app.primary_monitor()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No monitor found".to_string())?;
+
+    let monitor_size = monitor.size();
+    let menu_width = 280.0;
+    let menu_height = 300.0;
+
+    // Position at bottom-right corner with padding
+    let x = monitor_size.width as f64 - menu_width - 20.0;
+    let y = monitor_size.height as f64 - menu_height - 60.0; // Extra padding for taskbar
+
+    // Create new tray menu window positioned near system tray
     let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "tray-menu",
         tauri::WebviewUrl::App("/#/tray-menu".into())
     )
     .title("STYGIAN Menu")
-    .inner_size(280.0, 300.0)
+    .inner_size(menu_width, menu_height)
+    .position(x, y)
     .resizable(false)
     .decorations(false)
     .transparent(true)
@@ -1207,7 +1221,7 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
 
-    println!("✓ Custom tray menu window created");
+    println!("✓ Custom tray menu window created at position ({}, {})", x, y);
 
     Ok(())
 }
