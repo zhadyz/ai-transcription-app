@@ -42,23 +42,32 @@ import asyncio
 import logging
 import time
 import numpy as np
-import torch
 from typing import Optional, Callable, List, Dict
 from dataclasses import dataclass
 from collections import deque
 from faster_whisper import WhisperModel
 
+# Optional PyTorch support for Silero VAD
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
-# Import Silero VAD
+# Import Silero VAD (requires torch)
 try:
-    torch.set_num_threads(1)  # Optimize for real-time
-    from silero_vad import load_silero_vad, get_speech_timestamps
-    SILERO_AVAILABLE = True
-    logger.info("✓ Silero VAD loaded successfully")
+    if TORCH_AVAILABLE:
+        torch.set_num_threads(1)  # Optimize for real-time
+        from silero_vad import load_silero_vad, get_speech_timestamps
+        SILERO_AVAILABLE = True
+        logger.info("✓ Silero VAD loaded successfully")
+    else:
+        raise ImportError("PyTorch not available")
 except ImportError:
     SILERO_AVAILABLE = False
-    logger.warning("⚠ Silero VAD not available, falling back to simple energy-based VAD")
+    logger.warning("⚠ Silero VAD not available (requires PyTorch), falling back to simple energy-based VAD")
 
 
 @dataclass

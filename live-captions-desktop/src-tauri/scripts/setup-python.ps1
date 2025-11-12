@@ -81,7 +81,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "pip installed successfully" -ForegroundColor Green
 
-# Install backend dependencies
+# Install backend dependencies (excluding PyTorch for size optimization)
 Write-Host "`n[5/5] Installing backend dependencies..." -ForegroundColor Yellow
 # Script can be run from src-tauri/ or live-captions-desktop/
 $backendDir = if (Test-Path "backend") {
@@ -93,12 +93,27 @@ $requirementsFile = Join-Path $backendDir "requirements.txt"
 
 if (Test-Path $requirementsFile) {
     Write-Host "Requirements file: $requirementsFile" -ForegroundColor Gray
-    & $pythonExe -m pip install -r $requirementsFile --no-warn-script-location
+    Write-Host "Note: Excluding PyTorch/torchaudio to reduce bundle size" -ForegroundColor Yellow
+    Write-Host "GPU features require separate CUDA 12.4 + PyTorch installation" -ForegroundColor Yellow
+
+    # Create filtered requirements without PyTorch
+    $tempReqs = "$env:TEMP\requirements-embed-$( Get-Date -Format 'yyyyMMddHHmmss' ).txt"
+    Get-Content $requirementsFile | Where-Object {
+        $_ -notmatch '^torch==' -and
+        $_ -notmatch '^torchaudio==' -and
+        $_ -notmatch '^\s*#.*torch' -and
+        $_.Trim() -ne ''
+    } | Set-Content $tempReqs
+
+    & $pythonExe -m pip install -r $tempReqs --no-warn-script-location
+
+    Remove-Item $tempReqs -ErrorAction SilentlyContinue
+
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Error installing dependencies" -ForegroundColor Red
         exit 1
     }
-    Write-Host "Dependencies installed successfully" -ForegroundColor Green
+    Write-Host "Dependencies installed successfully (CPU-only mode)" -ForegroundColor Green
 } else {
     Write-Host "Warning: requirements.txt not found at $requirementsFile" -ForegroundColor Yellow
 }
