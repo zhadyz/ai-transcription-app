@@ -74,24 +74,10 @@ async def lifespan(app: FastAPI):
         default_quality = TranscriptionQuality.BALANCED  # 'small' model
         await asyncio.to_thread(whisper_service._get_model, default_quality)
         preload_time = time.time() - preload_start
-        logger.info(f"Whisper model preloaded successfully in {preload_time:.2f}s")
+        logger.info(f"Model preloaded successfully in {preload_time:.2f}s")
     except Exception as e:
-        logger.error(f"Failed to preload Whisper model: {e}. Will load on first request.", exc_info=True)
-
-    # Preload translation model (NLLB-200 CTranslate2)
-    from app.services.translation_service import get_translation_service
-
-    logger.info(f"Preloading NLLB-200 translation model ({settings.NLLB_MODEL_SIZE})...")
-    translation_preload_start = time.time()
-
-    try:
-        # Load translation service (loads model on init)
-        await asyncio.to_thread(get_translation_service)
-        translation_time = time.time() - translation_preload_start
-        logger.info(f"Translation model preloaded successfully in {translation_time:.2f}s")
-    except Exception as e:
-        logger.error(f"Failed to preload translation model: {e}. Will load on first request.", exc_info=True)
-
+        logger.error(f"Failed to preload model: {e}. Will load on first request.", exc_info=True)
+    
     # Start background cleanup task
     cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
     logger.info("Background cleanup task started")
