@@ -128,7 +128,7 @@ export enum TranscriptionStatus {
 }
 
 export interface TranscriptionState {
-  readonly taskId: string | null
+  taskId: string | null
   status: TranscriptionStatus
   progress: number
   currentStep: string
@@ -140,7 +140,7 @@ export interface TranscriptionState {
 
 export interface TranscriptionResult {
   readonly text: string
-  readonly segments: TranscriptionSegment[]
+  segments: TranscriptionSegment[]
   readonly language: string
   readonly duration: number
 }
@@ -420,7 +420,7 @@ export class DistributedSession {
 
         // Compute diff for local subscribers
         try {
-          const patches = Automerge.diff(oldDoc, newDoc)
+          const patches = Automerge.diff(oldDoc, newDoc, {})
           if (patches.length > 0) {
             this.patches$.next(patches)
           }
@@ -741,7 +741,7 @@ export class DistributedSession {
         const newDeviceCount = Object.keys(newDoc.devices).length
         console.log(`📱 [DistributedSession] Applied remote patch | Devices: ${oldDeviceCount} → ${newDeviceCount}`)
 
-        const patches = Automerge.diff(oldDoc, newDoc)
+        const patches = Automerge.diff(oldDoc, newDoc, {})
         console.log(`🔔 [DistributedSession] Emitting ${patches.length} patches to subscribers`)
         this.patches$.next(patches)
       } else {
@@ -1147,3 +1147,4 @@ type DeviceEvent =
   | { type: 'device_joined'; device: Device }
   | { type: 'device_left'; deviceId: string }
   | { type: 'role_changed'; deviceId: string; newRole: DeviceRole }
+  | { type: 'device_disconnected'; deviceId: string }

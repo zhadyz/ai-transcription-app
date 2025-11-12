@@ -138,7 +138,7 @@ export function SessionProvider({ backendUrl, children }: SessionProviderProps) 
     return false
   }, [backendUrl])
 
-  const createSession = useCallback(async (): Promise<string | null> => {
+  const createSession = useCallback(async (): Promise<{ sessionId: string; serverIP: string; qrData: string } | null> => {
     // Prevent concurrent creation
     if (isCreatingRef.current) {
       console.warn('⚠️ [Desktop] Session creation already in progress')

@@ -701,7 +701,7 @@ export const useTranscription = (options: UseTranscriptionOptions = {}) => {
         current_step: 'Preparing...'
       })
 
-      machine?.send('UPLOAD', file)
+      machine?.send('UPLOAD' as any, file)
 
       const startTime = Date.now()
       abortControllerRef.current = new AbortController()
@@ -725,7 +725,7 @@ export const useTranscription = (options: UseTranscriptionOptions = {}) => {
                 })
               }
             },
-            abortControllerRef.current.signal
+            abortControllerRef.current?.signal
           )
         )
 
@@ -745,7 +745,7 @@ export const useTranscription = (options: UseTranscriptionOptions = {}) => {
           })
 
           sharedSession?.startTranscription?.(newTaskId)
-          machine?.send('UPLOAD_SUCCESS', newTaskId)
+          machine?.send('UPLOAD_SUCCESS' as any, newTaskId)
           startPolling(newTaskId)
         }
       } catch (err) {
@@ -758,7 +758,7 @@ export const useTranscription = (options: UseTranscriptionOptions = {}) => {
             progress: Percentage(0),
             current_step: 'Failed'
           })
-          machine?.send('UPLOAD_FAILED', {
+          machine?.send('UPLOAD_FAILED' as any, {
             code: ErrorCode.NETWORK_ERROR,
             message,
             timestamp: Date.now()

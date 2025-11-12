@@ -217,7 +217,7 @@ export const TranscriptionSettings = memo(({
   // Memoize "other languages" list (exclude top languages to avoid duplicates)
   const otherLanguages = useMemo(() => {
     const topCodes = new Set(TOP_LANGUAGES.map(l => l.code))
-    return ALL_LANGUAGES.filter(lang => !topCodes.has(lang.code))
+    return ALL_LANGUAGES.filter(lang => !topCodes.has(lang.code as any))
   }, [])
 
   return (

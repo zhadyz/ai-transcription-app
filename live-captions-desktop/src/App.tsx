@@ -22,7 +22,6 @@ const BackgroundMedia = () => (
     muted
     playsInline
     className="absolute inset-0 w-full h-full object-cover opacity-30"
-    loading="lazy"
   >
     <source src={BACKGROUND_VIDEO} type="video/mp4" />
   </video>

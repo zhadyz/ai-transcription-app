@@ -1,0 +1,23 @@
+# ==================== AUTHENTICATION SYSTEM DEPENDENCIES ====================
+# Additional dependencies required for the JWT authentication system
+# Install with: pip install -r requirements-auth.txt
+
+# Database ORM
+sqlalchemy==2.0.25
+alembic==1.13.1  # Database migrations (optional)
+
+# Password Hashing
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# JWT Tokens
+pyjwt==2.8.0
+
+# Email (for password reset and verification)
+# python-multipart already in main requirements
+# For production email sending:
+# sendgrid==6.11.0  # SendGrid integration
+# boto3==1.34.34    # AWS SES integration
+
+# Additional security utilities
+python-jose[cryptography]==3.3.0  # Alternative JWT library (optional)

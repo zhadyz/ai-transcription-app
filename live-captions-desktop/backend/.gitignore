@@ -15,6 +15,16 @@ __pycache__/
 
 # Database files
 db/*.db
+db/sessions/
+
+# Storage (runtime data)
+storage/
+
+# Certificates
+*.pem
+
+# Backup files
+.backup/
 
 # Coverage reports
 .coverage

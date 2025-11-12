@@ -127,15 +127,12 @@ export class StateMachine<S extends TranscriptionState = IdleState> {
     return this._state
   }
 
-  transition<E extends EventsForState<S['status']>>(
-    event: E,
-    ...args: Parameters<ValidTransitions[S['status']][E]>
-  ): StateMachine<ReturnType<ValidTransitions[S['status']][E]>> {
+  transition(event: any, ...args: any[]): StateMachine<TranscriptionState> {
     const transitions = this.getTransitions()
     const transitionFn = transitions[event as string]
     
     if (!transitionFn) {
-      throw new Error(`Invalid transition: ${event} from ${this._state.status}`)
+      throw new Error(`Invalid transition: ${String(event)} from ${this._state.status}`)
     }
 
     const nextState = (transitionFn as any)(...args)
@@ -266,11 +263,7 @@ export class ReactiveStateMachine {
       shareReplay({ bufferSize: 1, refCount: true })
     )
   }
-
-  send<S extends StateStatus, E extends EventsForState<S>>(
-    event: E,
-    ...args: any[]
-  ): void {
+  send(event: any, ...args: any[]): void {
     try {
       this.machine = (this.machine as any).transition(event, ...args)
       this.state$.next(this.machine.state)
@@ -305,11 +298,7 @@ interface StateTransition {
 export class StateMachineWithHistory extends ReactiveStateMachine {
   private history: StateTransition[] = []
   private maxHistorySize = 100
-
-  send<S extends StateStatus, E extends EventsForState<S>>(
-    event: E,
-    ...args: any[]
-  ): void {
+  send(event: any, ...args: any[]): void {
     const from = this.current
 
     super.send(event, ...args)
@@ -393,7 +382,7 @@ export class PersistentStateMachine extends StateMachineWithHistory {
         const { state, history } = JSON.parse(saved)
         
         if (state && state.status !== 'uploading' && state.status !== 'processing') {
-          this.state['next'](state)
+          (this.state as any).next(state)
           if (history) {
             (this as any).history = history
           }
@@ -441,14 +430,10 @@ export class GuardedStateMachine extends StateMachineWithHistory {
     event: string,
     condition: GuardCondition<Extract<TranscriptionState, { status: S }>>
   ): void {
-    this.guards.set(`${fromStatus}:${event}`, condition)
+    this.guards.set(`${fromStatus}:${String(event)}`, condition)
   }
-
-  send<S extends StateStatus, E extends EventsForState<S>>(
-    event: E,
-    ...args: any[]
-  ): void {
-    const guardKey = `${this.current.status}:${event}`
+  send(event: any, ...args: any[]): void {
+    const guardKey = `${this.current.status}:${String(event)}`
     const guard = this.guards.get(guardKey)
 
     if (guard && !guard(this.current)) {

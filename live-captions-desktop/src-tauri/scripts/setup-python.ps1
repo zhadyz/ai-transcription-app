@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Stygian Captions - Python Setup" -ForegroundColor Cyan
+Write-Host "Stygian - Python Setup" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Determine architecture
@@ -83,7 +83,12 @@ Write-Host "pip installed successfully" -ForegroundColor Green
 
 # Install backend dependencies
 Write-Host "`n[5/5] Installing backend dependencies..." -ForegroundColor Yellow
-$backendDir = Join-Path (Get-Location) "backend"
+# Script can be run from src-tauri/ or live-captions-desktop/
+$backendDir = if (Test-Path "backend") {
+    Join-Path (Get-Location) "backend"
+} else {
+    Join-Path (Get-Location) "../backend"
+}
 $requirementsFile = Join-Path $backendDir "requirements.txt"
 
 if (Test-Path $requirementsFile) {

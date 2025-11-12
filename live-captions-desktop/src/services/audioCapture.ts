@@ -220,7 +220,7 @@ export class AudioCaptureService {
       }
 
       // Get frequency data
-      this.analyserNode.getByteFrequencyData(this.volumeDataArray);
+      this.analyserNode.getByteFrequencyData(this.volumeDataArray as Uint8Array<ArrayBuffer>);
 
       // Calculate average volume (0-1 range)
       const sum = this.volumeDataArray.reduce((a, b) => a + b, 0);

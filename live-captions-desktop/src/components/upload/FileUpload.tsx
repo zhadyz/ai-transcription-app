@@ -286,7 +286,7 @@ export default function FileUpload() {
     }
 
     await translation.translate(
-      transcription.result.segments,
+      transcription.result.segments as any,
       transcription.result.language_detected,
       translation.targetLanguage
     )
@@ -386,6 +386,10 @@ export default function FileUpload() {
                   transcription.reset()
               }}
               disabled={transcription.isUploading || !!transcription.taskId}
+                isDragging={false}
+                onDragOver={(e) => e.preventDefault()}
+                onDragLeave={(e) => e.preventDefault()}
+                onDrop={(e) => e.preventDefault()}
             />
             </>
           )}
@@ -442,7 +446,7 @@ export default function FileUpload() {
                         className="mb-6 mt-6"
                       >
                         <TranscriptionResult
-                          segments={transcription.result.segments}
+                          segments={transcription.result.segments as any}
                           detectedLanguage={transcription.result.language_detected}
                           onCopy={handleCopyOriginal}
                           copied={copiedOriginal}
