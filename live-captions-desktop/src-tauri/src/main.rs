@@ -486,7 +486,7 @@ async fn start_capture(
     println!("✓ Live capture enabled - captions will emit to overlay window");
 
     // Initialize transcription logging directory (file created lazily on first caption)
-    let log_dir = match get_transcription_dir(&app_handle) {
+    let _log_dir = match get_transcription_dir(&app_handle) {
         Ok(dir) => {
             // Rotate old log files (keep max 10)
             let _ = rotate_log_files(&dir);
@@ -751,7 +751,7 @@ async fn stop_capture(app_handle: AppHandle, state: State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
-async fn open_transcription_folder(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+async fn open_transcription_folder(_app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let log_dir = state.log_dir.lock().unwrap();
 
     if log_dir.as_os_str().is_empty() {
@@ -1191,7 +1191,7 @@ async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     }
 
     // Create new tray menu window
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "tray-menu",
         tauri::WebviewUrl::App("/#/tray-menu".into())
@@ -1258,7 +1258,7 @@ fn main() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .on_tray_icon_event(|tray, event| {
                     if let tauri::tray::TrayIconEvent::Click { .. } = event {
-                        let app = tray.app_handle();
+                        let app = tray.app_handle().clone();
                         tauri::async_runtime::spawn(async move {
                             let _ = show_tray_menu(app).await;
                         });
