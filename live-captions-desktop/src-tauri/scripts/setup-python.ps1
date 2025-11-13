@@ -9,9 +9,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Change to src-tauri directory (script is called from project root)
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$srcTauriDir = Split-Path -Parent $scriptDir
+Set-Location $srcTauriDir
+
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Stygian - Python Setup" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Working directory: $(Get-Location)" -ForegroundColor Gray
 
 # Determine architecture
 $arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "win32" }
@@ -81,49 +87,63 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "pip installed successfully" -ForegroundColor Green
 
-# Install backend dependencies (excluding PyTorch for size optimization)
-Write-Host "`n[5/5] Installing backend dependencies..." -ForegroundColor Yellow
-# Script can be run from src-tauri/ or live-captions-desktop/
-$backendDir = if (Test-Path "backend") {
-    Join-Path (Get-Location) "backend"
-} else {
-    Join-Path (Get-Location) "../backend"
-}
-$requirementsFile = Join-Path $backendDir "requirements.txt"
-
-if (Test-Path $requirementsFile) {
-    Write-Host "Requirements file: $requirementsFile" -ForegroundColor Gray
-    Write-Host "Note: Excluding PyTorch/torchaudio to reduce bundle size" -ForegroundColor Yellow
-    Write-Host "GPU features require separate CUDA 12.4 + PyTorch installation" -ForegroundColor Yellow
-
-    # Create filtered requirements without PyTorch
-    $tempReqs = "$env:TEMP\requirements-embed-$( Get-Date -Format 'yyyyMMddHHmmss' ).txt"
-    Get-Content $requirementsFile | Where-Object {
-        $_ -notmatch '^torch==' -and
-        $_ -notmatch '^torchaudio==' -and
-        $_ -notmatch '^\s*#.*torch' -and
-        $_.Trim() -ne ''
-    } | Set-Content $tempReqs
-
-    & $pythonExe -m pip install -r $tempReqs --no-warn-script-location
-
-    Remove-Item $tempReqs -ErrorAction SilentlyContinue
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error installing dependencies" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "Dependencies installed successfully (CPU-only mode)" -ForegroundColor Green
-} else {
-    Write-Host "Warning: requirements.txt not found at $requirementsFile" -ForegroundColor Yellow
-}
+# Install backend dependencies (SKIPPED - install separately after deployment)
+Write-Host "`n[5/5] Skipping backend dependencies..." -ForegroundColor Yellow
+Write-Host "Note: Python dependencies must be installed separately" -ForegroundColor Yellow
+Write-Host "Run 'python-embed\python.exe -m pip install -r backend\requirements.txt' after installation" -ForegroundColor Gray
 
 # Cleanup
 Remove-Item "$TargetDir\get-pip.py" -ErrorAction SilentlyContinue
 
+# Compress python-embed for bundling (reduces build-time file processing)
+Write-Host "`n[6/6] Compressing Python environment for distribution..." -ForegroundColor Yellow
+$archivePath = "$TargetDir.zip"
+if (Test-Path $archivePath) {
+    Remove-Item $archivePath -Force
+}
+
+try {
+    Compress-Archive -Path $TargetDir -DestinationPath $archivePath -CompressionLevel Optimal -Force
+    $archiveSizeMB = [math]::Round((Get-Item $archivePath).Length / 1MB, 2)
+    Write-Host "Created archive: $archiveSizeMB MB" -ForegroundColor Green
+
+    # Remove uncompressed directory (we only need the archive for bundling)
+    Write-Host "Removing uncompressed directory..." -ForegroundColor Gray
+    Remove-Item -Recurse -Force $TargetDir
+    Write-Host "Cleanup complete" -ForegroundColor Green
+} catch {
+    Write-Host "Error creating archive: $_" -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Python setup complete!" -ForegroundColor Green
-Write-Host "Location: $TargetDir" -ForegroundColor Gray
-$sizeInMB = [math]::Round((Get-ChildItem -Recurse $TargetDir | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
-Write-Host "Size: $sizeInMB MB" -ForegroundColor Gray
+Write-Host "Archive: $archivePath" -ForegroundColor Gray
+Write-Host "Size: $archiveSizeMB MB (compressed)" -ForegroundColor Gray
+Write-Host "Note: Archive will be extracted on first application launch" -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Cyan
+
+# Create backend.zip archive
+Write-Host "`n[7/7] Creating backend archive..." -ForegroundColor Yellow
+$backendDir = "backend"
+$backendZip = "backend.zip"
+
+# Check if backend directory exists
+if (-not (Test-Path $backendDir)) {
+    Write-Host "Error: Backend directory not found at: $backendDir" -ForegroundColor Red
+    Write-Host "Current directory: $(Get-Location)" -ForegroundColor Gray
+    exit 1
+}
+
+if (Test-Path $backendZip) {
+    Remove-Item $backendZip -Force
+}
+
+try {
+    Compress-Archive -Path $backendDir -DestinationPath $backendZip -CompressionLevel Optimal -Force
+    $backendSizeMB = [math]::Round((Get-Item $backendZip).Length / 1MB, 2)
+    Write-Host "Created backend archive: $backendSizeMB MB" -ForegroundColor Green
+} catch {
+    Write-Host "Error creating backend archive: $_" -ForegroundColor Red
+    exit 1
+}

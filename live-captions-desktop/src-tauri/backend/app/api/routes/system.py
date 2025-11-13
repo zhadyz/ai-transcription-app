@@ -5,6 +5,7 @@ TRANSCENDENT DEVICE TELEMETRY ENGINE - S++ Implementation
 """
 
 from fastapi import APIRouter
+import torch
 import logging
 import time
 import threading
@@ -13,15 +14,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 import psutil
-
-# Optional GPU support - gracefully degrades to CPU-only mode
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("PyTorch not available - GPU features disabled. Install CUDA 12.4 for GPU support.")
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/system", tags=["system"])
@@ -284,8 +276,8 @@ async def get_device_info():
     Omniscient device telemetry with statistical analysis,
     trend prediction, and health scoring.
     """
-    cuda_available = TORCH_AVAILABLE and torch.cuda.is_available()
-
+    cuda_available = torch.cuda.is_available()
+    
     if cuda_available:
         device_name = torch.cuda.get_device_name(0)
         device_type = "GPU"
@@ -345,12 +337,12 @@ async def get_device_info():
     else:
         # CPU metrics with system memory
         mem = psutil.virtual_memory()
-
+        
         return {
             "device_type": "CPU",
             "device_name": "CPU",
             "cuda_version": None,
-            "pytorch_version": torch.__version__ if TORCH_AVAILABLE else "not installed",
+            "pytorch_version": torch.__version__,
             "system_memory_total_gb": round(mem.total / (1024**3), 2),
             "system_memory_used_gb": round(mem.used / (1024**3), 2),
             "system_memory_percent": round(mem.percent, 1),
@@ -362,8 +354,8 @@ async def get_device_info():
 @router.get("/device-health")
 async def get_device_health():
     """Dedicated health check endpoint"""
-    cuda_available = TORCH_AVAILABLE and torch.cuda.is_available()
-
+    cuda_available = torch.cuda.is_available()
+    
     if not cuda_available:
         return {"status": "healthy", "device": "cpu"}
     

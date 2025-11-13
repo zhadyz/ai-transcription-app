@@ -21,8 +21,8 @@
       "icons/stygian.ico"
     ],
     "resources": [
-      "python-embed/**",
-      "../backend/**"
+      "python-embed.zip",
+      "backend.zip"
     ],
     "windows": {
       "certificateThumbprint": null,
