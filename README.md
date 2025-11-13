@@ -8,6 +8,27 @@ Enterprise-grade speech recognition platform implementing GPU-accelerated transc
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.3-blue.svg)](https://reactjs.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://tauri.app/)
+[![Release](https://img.shields.io/badge/release-v1.0.1-brightgreen.svg)](https://github.com/zhadyz/ai-transcription-app/releases/tag/v1.0.1)
+
+---
+
+## Quick Download
+
+**Windows Desktop Application** - Zero configuration required, automatic setup on first launch:
+
+- **[Stygian_1.0.1_x64_en-US.msi](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64_en-US.msi)** (25 MB) - Windows Installer (MSI)
+- **[Stygian_1.0.1_x64-setup.exe](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64-setup.exe)** (23 MB) - NSIS Installer
+
+**What's Included**:
+- Embedded Python 3.11 runtime (no external Python required)
+- FastAPI backend with Faster-Whisper
+- Automatic dependency installation on first launch
+- Live caption overlay system
+- Real-time translation support
+
+**Installation**: Download → Run installer → Launch → Wait 2-3 minutes (first time only)
+
+[See full release notes](https://github.com/zhadyz/ai-transcription-app/releases/tag/v1.0.1)
 
 ---
 
@@ -211,21 +232,33 @@ npm run tauri build  # Production installer
 
 **Production Installer**:
 
-The Tauri build process generates a standalone Windows installer with:
-- Embedded Python 3.11 runtime (~470MB)
+**Download Pre-Built Installers**:
+- **[Stygian_1.0.1_x64_en-US.msi](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64_en-US.msi)** (25 MB) - Windows Installer (MSI)
+- **[Stygian_1.0.1_x64-setup.exe](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64-setup.exe)** (23 MB) - NSIS Installer
+
+The installers include:
+- Embedded Python 3.11 runtime (extracted on first launch)
 - Self-contained backend server
-- All dependencies pre-installed
+- Automatic dependency installation (first launch)
 - Zero external dependencies (Docker-free)
+
+**Build Your Own**:
+```bash
+cd live-captions-desktop
+npm run tauri build
+```
 
 **Build Artifacts**:
 ```
-live-captions-desktop/src-tauri/target/release/bundle/msi/
-└── Stygian_<version>_x64_en-US.msi
+live-captions-desktop/src-tauri/target/release/bundle/
+├── msi/Stygian_1.0.1_x64_en-US.msi (25 MB)
+└── nsis/Stygian_1.0.1_x64-setup.exe (23 MB)
 ```
 
 **Installer Characteristics**:
-- **Size**: ~600MB (includes Python + dependencies)
-- **Installation Time**: 2-3 minutes
+- **Download Size**: 23-25 MB (compressed Python + backend)
+- **First Launch**: 2-3 minutes (dependency installation)
+- **Subsequent Launches**: Instant
 - **CUDA**: Optional (graceful degradation to CPU)
 - **System Integration**: Native Windows service
 
