@@ -141,8 +141,9 @@ impl BackendManager {
 
             // Normalize paths to remove \\?\ prefix for PowerShell compatibility
             let backend_zip_normalized = normalize_path(&backend_zip);
-            let backend_dir_normalized = normalize_path(&backend_dir);
+            let resources_dir_normalized = normalize_path(resources_dir);
 
+            // Extract to resources_dir (the zip contains "backend/" folder already)
             let output = Command::new("powershell.exe")
                 .arg("-ExecutionPolicy")
                 .arg("Bypass")
@@ -150,7 +151,7 @@ impl BackendManager {
                 .arg(format!(
                     "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
                     backend_zip_normalized.display(),
-                    backend_dir_normalized.display()
+                    resources_dir_normalized.display()
                 ))
                 .output()
                 .map_err(|e| format!("Failed to run PowerShell extraction: {}", e))?;
