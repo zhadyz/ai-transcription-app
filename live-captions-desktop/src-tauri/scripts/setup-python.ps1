@@ -55,14 +55,21 @@ try {
     exit 1
 }
 
-# Enable pip in embedded Python
+# Enable pip in embedded Python and add backend to path
 Write-Host "`n[4/5] Configuring embedded Python for pip..." -ForegroundColor Yellow
 $pthFile = Get-ChildItem -Path $TargetDir -Filter "python*._pth" | Select-Object -First 1
 if ($pthFile) {
-    $content = Get-Content $pthFile.FullName
-    $content = $content -replace '#import site', 'import site'
-    Set-Content -Path $pthFile.FullName -Value $content
-    Write-Host "Enabled site-packages" -ForegroundColor Green
+    # Create the correct python311._pth content with backend path
+    $pthContent = @"
+python311.zip
+.
+../backend
+
+# Uncomment to run site.main() automatically
+import site
+"@
+    Set-Content -Path $pthFile.FullName -Value $pthContent -NoNewline
+    Write-Host "Enabled site-packages and added backend to path" -ForegroundColor Green
 } else {
     Write-Host "Warning: Could not find ._pth file" -ForegroundColor Yellow
 }
