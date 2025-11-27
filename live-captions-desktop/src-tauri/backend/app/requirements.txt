@@ -39,8 +39,9 @@ protobuf>=3.20.0  # Protocol buffers for model loading
 accelerate>=0.20.0  # Optimized model loading
 
 # ==================== FILE VALIDATION ====================
-# LINUX VERSION (for Docker)
-python-magic==0.4.27
+# python-magic removed - requires libmagic DLL on Windows
+# Extension-based validation is used as fallback on Windows
+# For Linux/Docker: pip install python-magic
 
 # ==================== UTILITIES ====================
 tenacity==9.0.0

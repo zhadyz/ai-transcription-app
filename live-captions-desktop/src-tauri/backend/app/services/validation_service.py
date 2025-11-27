@@ -1,4 +1,3 @@
-import magic
 import logging
 import time
 from pathlib import Path
@@ -6,6 +5,16 @@ from typing import Tuple
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Try to import magic, but make it optional for Windows
+# python-magic requires libmagic DLL which isn't available on Windows by default
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+    logger.info("python-magic loaded successfully")
+except ImportError:
+    MAGIC_AVAILABLE = False
+    logger.warning("python-magic not available - using extension-based validation")
 
 # Allowed MIME types for uploaded files
 ALLOWED_MIME_TYPES = {
@@ -85,44 +94,76 @@ ALLOWED_MIME_TYPES = {
     'video/x-ogg',          # OGG (alternative)
 }
 
+# Extension-based validation fallback (for when libmagic is unavailable)
+ALLOWED_EXTENSIONS = {
+    # Audio
+    '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.opus', '.webm', '.flac',
+    '.3gp', '.3gpp', '.amr', '.wma', '.aiff', '.aif',
+    # Video
+    '.mp4', '.m4v', '.mov', '.avi', '.mkv', '.webm', '.mpeg', '.mpg',
+    '.wmv', '.asf', '.3gp', '.3gpp', '.ogv',
+}
+
+# Map extensions to MIME types for fallback
+EXTENSION_TO_MIME = {
+    '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4',
+    '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/opus',
+    '.flac': 'audio/flac', '.wma': 'audio/x-ms-wma', '.aiff': 'audio/aiff',
+    '.mp4': 'video/mp4', '.m4v': 'video/x-m4v', '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+    '.mpeg': 'video/mpeg', '.mpg': 'video/mpeg', '.wmv': 'video/x-ms-wmv',
+}
+
+
+def _validate_by_extension(file_path: Path) -> Tuple[bool, str, str]:
+    """
+    Fallback validation using file extension (when libmagic unavailable).
+    Less secure than magic bytes, but works on all platforms.
+    """
+    ext = file_path.suffix.lower()
+
+    if ext in ALLOWED_EXTENSIONS:
+        mime = EXTENSION_TO_MIME.get(ext, f"audio/{ext[1:]}")
+        logger.info(f"File {file_path.name} validated by extension: {ext} -> {mime}")
+        return True, mime, "Valid file type (validated by extension)"
+    else:
+        logger.warning(f"Rejected file extension: {ext} for file {file_path.name}")
+        return False, f"unknown/{ext}", f"Invalid file type: {ext}. Only audio/video files are allowed."
+
 
 def validate_file_type(file_path: Path) -> Tuple[bool, str, str]:
     """
     Validate file type using magic bytes (actual file content).
+    Falls back to extension-based validation on Windows where libmagic is unavailable.
     Retries up to 3 times to handle race conditions with disk sync.
-    
+
     Args:
         file_path: Path to the file to validate
-        
+
     Returns:
         Tuple of (is_valid, mime_type, message)
     """
+    # Check if file exists first
+    if not file_path.exists():
+        return False, "unknown", f"File not found: {file_path}"
+
+    file_size = file_path.stat().st_size
+    if file_size == 0:
+        return False, "unknown", "File is empty"
+
+    # Use extension-based validation if magic is not available (Windows)
+    if not MAGIC_AVAILABLE:
+        return _validate_by_extension(file_path)
+
+    # Magic-based validation with retries
     max_attempts = 3
     retry_delay = 0.2  # 200ms between retries
-    
+
     for attempt in range(max_attempts):
         try:
-            # Check if file exists and has size
-            if not file_path.exists():
-                if attempt < max_attempts - 1:
-                    logger.warning(f"File not found on attempt {attempt + 1}, retrying...")
-                    time.sleep(retry_delay)
-                    continue
-                return False, "unknown", f"File not found: {file_path}"
-            
-            file_size = file_path.stat().st_size
-            
-            # Check if file is empty
-            if file_size == 0:
-                if attempt < max_attempts - 1:
-                    logger.warning(f"File empty on attempt {attempt + 1}/{max_attempts}, retrying...")
-                    time.sleep(retry_delay)
-                    continue
-                return False, "unknown", "File is empty after multiple checks"
-            
             # Get MIME type from file content
             mime = magic.from_file(str(file_path), mime=True)
-            
+
             # If detected as inode/blockdevice, file might not be fully synced yet
             if mime == "inode/blockdevice":
                 if attempt < max_attempts - 1:
@@ -141,16 +182,16 @@ def validate_file_type(file_path: Path) -> Tuple[bool, str, str]:
                         f"File validation failed: detected as {mime}. "
                         "This may indicate incomplete file transfer or disk sync issue."
                     )
-            
+
             # Successful detection
             logger.info(f"File {file_path.name} detected as: {mime} ({file_size:,} bytes)")
-            
+
             if mime in ALLOWED_MIME_TYPES:
                 return True, mime, "Valid file type"
             else:
                 logger.warning(f"Rejected file type: {mime} for file {file_path.name}")
                 return False, mime, f"Invalid file type: {mime}. Only audio/video files are allowed."
-                
+
         except Exception as e:
             if attempt < max_attempts - 1:
                 logger.warning(f"Validation error on attempt {attempt + 1}/{max_attempts}: {e}")
@@ -158,10 +199,12 @@ def validate_file_type(file_path: Path) -> Tuple[bool, str, str]:
                 continue
             else:
                 logger.error(f"File validation failed for {file_path} after {max_attempts} attempts: {e}")
-                return False, "unknown", f"File validation failed: {str(e)}"
-    
+                # Fall back to extension validation on error
+                logger.info("Falling back to extension-based validation")
+                return _validate_by_extension(file_path)
+
     # Should never reach here, but just in case
-    return False, "unknown", "File validation failed after retries"
+    return _validate_by_extension(file_path)
 
 
 def validate_file_size(file_path: Path, max_size_mb: int = None) -> tuple[bool, str]:
