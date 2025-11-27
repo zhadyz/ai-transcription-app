@@ -1,7 +1,8 @@
 import { HashRouter, Routes, Route } from 'react-router-dom'
-import { lazy, Suspense, useMemo, useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { SessionProvider } from './core/SessionContext'
 import { WebSocketProvider } from './core/WebSocketContext'
 import { LiveCaptureProvider, useLiveCapture } from './contexts/LiveCaptureContext'
@@ -9,6 +10,7 @@ import { LiveCapturePanel, CaptionOverlay } from './components/livecapture'
 import { SimpleDeviceIndicator } from './components/system/SimpleDeviceIndicator'
 import { SetupWizard } from './components/setup'
 import Overlay from './Overlay'
+import InterviewMode from './pages/InterviewMode'
 
 const FileUpload = lazy(() => import('./components/upload/FileUpload'))
 const MobileUpload = lazy(() => import('./components/upload/MobileUpload'))
@@ -157,9 +159,43 @@ export default function App() {
 
   const [isSetupComplete, setIsSetupComplete] = useState<boolean | null>(null)
   const [isCheckingSetup, setIsCheckingSetup] = useState(true)
+  const [backendUrl, setBackendUrl] = useState<string | null>(null)
+  const [backendError, setBackendError] = useState<string | null>(null)
 
-  // For Tauri desktop app, backend runs on localhost:8000
-  const backendUrl = useMemo(() => 'http://localhost:8000', [])
+  // Listen for backend-status event from Tauri backend manager
+  useEffect(() => {
+    let unlisten: (() => void) | null = null
+
+    const setupBackendListener = async () => {
+      // First, try to get the current backend URL (in case event already fired)
+      try {
+        const url = await invoke<string>('get_backend_url')
+        if (url && url !== 'http://127.0.0.1:8000') {
+          console.log('🔗 [STYGIAN] Got backend URL from invoke:', url)
+          setBackendUrl(url)
+        }
+      } catch (e) {
+        console.log('⏳ [STYGIAN] Backend URL not ready yet, waiting for event...')
+      }
+
+      // Listen for backend-status event
+      unlisten = await listen<{ status: string; url?: string; error?: string }>('backend-status', (event) => {
+        console.log('📡 [STYGIAN] Received backend-status event:', event.payload)
+        if (event.payload.status === 'ready' && event.payload.url) {
+          setBackendUrl(event.payload.url)
+          setBackendError(null)
+        } else if (event.payload.status === 'error') {
+          setBackendError(event.payload.error || 'Backend failed to start')
+        }
+      })
+    }
+
+    setupBackendListener()
+
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [])
 
   console.log('🔗 [STYGIAN] Backend URL:', backendUrl)
 
@@ -187,13 +223,23 @@ export default function App() {
     setIsSetupComplete(true)
   }
 
-  // Show loading while checking setup status
-  if (isCheckingSetup) {
+  // Show loading while checking setup status or waiting for backend
+  if (isCheckingSetup || !backendUrl) {
     return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <div className="text-amber-200 text-sm tracking-[0.2em] uppercase">
-          Loading...
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center">
+        <div className="text-amber-200 text-sm tracking-[0.2em] uppercase mb-4">
+          {backendError ? 'Backend Error' : isCheckingSetup ? 'Loading...' : 'Initializing backend...'}
         </div>
+        {backendError && (
+          <div className="text-red-400 text-xs max-w-md text-center px-4">
+            {backendError}
+          </div>
+        )}
+        {!backendError && !isCheckingSetup && (
+          <div className="text-gray-500 text-xs">
+            First launch may take a few minutes to install dependencies
+          </div>
+        )}
       </div>
     )
   }
@@ -247,6 +293,7 @@ export default function App() {
                           </div>
                         } />
                         <Route path="/mobile-upload" element={<MobileUpload />} />
+                        <Route path="/interview" element={<InterviewMode />} />
                       </Routes>
                     </Suspense>
                   </div>

@@ -1,6 +1,6 @@
 {
   "productName": "Stygian",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.stygian.captions",
   "build": {
     "beforeDevCommand": "npm run dev",
