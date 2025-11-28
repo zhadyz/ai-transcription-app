@@ -44,7 +44,11 @@ def get_local_ip() -> str:
         Local IP address or 'localhost' if detection fails
     """
     import os
-    import netifaces
+
+    try:
+        import netifaces
+    except ImportError:
+        netifaces = None
 
     try:
         # Option 1: Use environment variable (can be set in docker-compose.yml)
@@ -53,20 +57,21 @@ def get_local_ip() -> str:
 
         # Option 2: Detect all network interfaces and find the real local IP
         # Exclude Docker bridge IPs (172.x.x.x) and loopback (127.x.x.x)
-        for interface in netifaces.interfaces():
-            try:
-                addrs = netifaces.ifaddresses(interface)
-                if netifaces.AF_INET in addrs:
-                    for addr_info in addrs[netifaces.AF_INET]:
-                        ip = addr_info['addr']
-                        # Skip loopback and Docker bridge IPs
-                        if not ip.startswith('127.') and not ip.startswith('172.'):
-                            # Prefer private network IPs (192.168.x.x, 10.x.x.x)
-                            if ip.startswith('192.168.') or ip.startswith('10.'):
-                                logger.info(f"Detected host IP: {ip} (interface: {interface})")
-                                return ip
-            except (ValueError, KeyError):
-                continue
+        if netifaces:
+            for interface in netifaces.interfaces():
+                try:
+                    addrs = netifaces.ifaddresses(interface)
+                    if netifaces.AF_INET in addrs:
+                        for addr_info in addrs[netifaces.AF_INET]:
+                            ip = addr_info['addr']
+                            # Skip loopback and Docker bridge IPs
+                            if not ip.startswith('127.') and not ip.startswith('172.'):
+                                # Prefer private network IPs (192.168.x.x, 10.x.x.x)
+                                if ip.startswith('192.168.') or ip.startswith('10.'):
+                                    logger.info(f"Detected host IP: {ip} (interface: {interface})")
+                                    return ip
+                except (ValueError, KeyError):
+                    continue
 
         # Option 3: Fallback to socket method (works outside Docker)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
