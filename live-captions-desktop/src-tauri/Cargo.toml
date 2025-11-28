@@ -1,6 +1,6 @@
 [package]
 name = "live-captions-desktop"
-version = "1.0.13"
+version = "1.0.14"
 description = "Real-time system audio captions with overlay"
 authors = ["you"]
 edition = "2021"

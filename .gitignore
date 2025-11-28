@@ -139,3 +139,4 @@ live-captions-desktop/src-tauri/target/
 test_*.py
 stress_test.py
 convert_*.py
+models/
