@@ -57,10 +57,12 @@ class NLLBTranslationService:
         logger.info(f"Loading NLLB-200-CT2 translation model ({model_size})...")
 
         # Download model if not cached
+        # Use default HuggingFace cache (~/.cache/huggingface/hub)
+        # to avoid issues with relative paths in installed apps
         from huggingface_hub import snapshot_download
         model_path = snapshot_download(
             repo_id=model_id,
-            cache_dir="./models",
+            cache_dir=None,  # Use HF default cache location
             local_files_only=False
         )
         logger.info(f"Model downloaded to: {model_path}")
@@ -87,7 +89,7 @@ class NLLBTranslationService:
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_id,
-            cache_dir="./models"
+            cache_dir=None  # Use HF default cache location
         )
 
         logger.info(f"✓ NLLB-200-CT2 ({model_size}) loaded on {self.device}")
