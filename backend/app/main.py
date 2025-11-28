@@ -407,12 +407,26 @@ async def metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
-        reload=True,
-        log_config=None,  # Use our custom logging
-        ssl_keyfile="./localhost+2-key.pem",
-        ssl_certfile="./localhost+2.pem"
-    )
+    import os
+
+    # SSL configuration - only use if certificates exist
+    ssl_keyfile = "./localhost+2-key.pem"
+    ssl_certfile = "./localhost+2.pem"
+
+    uvicorn_kwargs = {
+        "app": "app.main:app",
+        "host": settings.API_HOST,
+        "port": settings.API_PORT,
+        "reload": True,
+        "log_config": None,  # Use our custom logging
+    }
+
+    # Only add SSL if both certificate files exist
+    if os.path.exists(ssl_keyfile) and os.path.exists(ssl_certfile):
+        uvicorn_kwargs["ssl_keyfile"] = ssl_keyfile
+        uvicorn_kwargs["ssl_certfile"] = ssl_certfile
+        logger.info("SSL certificates found - starting with HTTPS")
+    else:
+        logger.info("No SSL certificates found - starting with HTTP")
+
+    uvicorn.run(**uvicorn_kwargs)
