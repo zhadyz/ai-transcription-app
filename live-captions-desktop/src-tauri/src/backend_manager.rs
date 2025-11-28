@@ -117,14 +117,41 @@ impl BackendManager {
             return Err("Python extraction not implemented for non-Windows platforms yet".to_string());
         }
 
-        // Verify extraction (skip check on Windows due to long path issues)
-        // The extraction may succeed but .exists() fails with paths > 260 chars
-        #[cfg(not(target_os = "windows"))]
-        {
-            if !python_dir.join("python.exe").exists() {
+        // Verify extraction succeeded by checking for python.exe
+        let python_exe = python_dir.join("python.exe");
+        let python_exe_normalized = normalize_path(&python_exe);
+
+        // Try to verify the file exists
+        if !python_exe_normalized.exists() {
+            // Double-check using dir command on Windows as a fallback
+            #[cfg(target_os = "windows")]
+            {
+                let check_output = Command::new("cmd.exe")
+                    .arg("/C")
+                    .arg("dir")
+                    .arg(&python_exe_normalized)
+                    .output();
+
+                match check_output {
+                    Ok(output) if output.status.success() => {
+                        println!("✓ Python.exe verified via dir command");
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Python extraction completed but python.exe not found at: {:?}\n\
+                            Please check if antivirus is blocking extraction.\n\
+                            Try running the installer as administrator.",
+                            python_exe_normalized
+                        ));
+                    }
+                }
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
                 return Err(format!(
                     "Python extraction completed but python.exe not found at: {:?}",
-                    python_dir.join("python.exe")
+                    python_exe_normalized
                 ));
             }
         }
@@ -229,9 +256,32 @@ impl BackendManager {
         let python_exe = python_dir.join("python.exe");
         let requirements_txt = backend_dir.join("app").join("requirements.txt");
 
+        // Normalize paths to remove \\?\ prefix for Command::new() compatibility
+        let python_exe_normalized = normalize_path(&python_exe);
+        let requirements_txt_normalized = normalize_path(&requirements_txt);
+
+        // Log paths for debugging
+        println!("📂 Python exe path: {:?}", python_exe_normalized);
+        println!("📂 Requirements path: {:?}", requirements_txt_normalized);
+
+        // Verify python.exe exists before attempting to run it
+        if !python_exe_normalized.exists() {
+            return Err(format!(
+                "Python executable not found at: {:?}\n\
+                This usually means the extraction failed.\n\
+                Please try:\n\
+                1. Close the app\n\
+                2. Delete the folder: {:?}\n\
+                3. Restart the app to re-extract",
+                python_exe_normalized,
+                python_dir
+            ));
+        }
+
         // Check if requirements.txt exists
-        if !requirements_txt.exists() {
-            println!("⚠ No requirements.txt found, skipping dependency installation");
+        if !requirements_txt_normalized.exists() {
+            println!("⚠ No requirements.txt found at: {:?}", requirements_txt_normalized);
+            println!("⚠ Skipping dependency installation");
             // Create marker anyway to avoid repeated checks
             let _ = fs::write(&deps_marker, "");
             emit_progress(app_handle, "Dependencies ready", 50, None);
@@ -240,10 +290,6 @@ impl BackendManager {
 
         #[cfg(target_os = "windows")]
         {
-            // Normalize paths to remove \\?\ prefix for Command::new() compatibility
-            let python_exe_normalized = normalize_path(&python_exe);
-            let requirements_txt_normalized = normalize_path(&requirements_txt);
-
             let output = Command::new(&python_exe_normalized)
                 .arg("-m")
                 .arg("pip")
@@ -252,11 +298,17 @@ impl BackendManager {
                 .arg(&requirements_txt_normalized)
                 .arg("--no-warn-script-location")
                 .output()
-                .map_err(|e| format!("Failed to run pip install: {}", e))?;
+                .map_err(|e| format!(
+                    "Failed to run pip install: {}\n\
+                    Python path: {:?}\n\
+                    Requirements path: {:?}",
+                    e, python_exe_normalized, requirements_txt_normalized
+                ))?;
 
             if !output.status.success() {
                 return Err(format!(
-                    "Dependency installation failed: {}",
+                    "Dependency installation failed:\nSTDOUT: {}\nSTDERR: {}",
+                    String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 ));
             }
