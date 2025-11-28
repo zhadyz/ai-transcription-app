@@ -8,7 +8,7 @@ import { WebSocketProvider } from './core/WebSocketContext'
 import { LiveCaptureProvider, useLiveCapture } from './contexts/LiveCaptureContext'
 import { LiveCapturePanel, CaptionOverlay } from './components/livecapture'
 import { SimpleDeviceIndicator } from './components/system/SimpleDeviceIndicator'
-import { SetupWizard } from './components/setup'
+import { SetupWizard, SetupProgress } from './components/setup'
 import Overlay from './Overlay'
 import InterviewMode from './pages/InterviewMode'
 
@@ -223,24 +223,50 @@ export default function App() {
     setIsSetupComplete(true)
   }
 
+  // Handle backend setup completion
+  const handleBackendReady = () => {
+    // Backend is ready - the backendUrl state will be updated by the event listener
+    console.log('Backend setup complete')
+  }
+
+  // Handle backend setup error
+  const handleBackendError = (error: string) => {
+    setBackendError(error)
+  }
+
   // Show loading while checking setup status or waiting for backend
   if (isCheckingSetup || !backendUrl) {
-    return (
-      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center">
-        <div className="text-amber-200 text-sm tracking-[0.2em] uppercase mb-4">
-          {backendError ? 'Backend Error' : isCheckingSetup ? 'Loading...' : 'Initializing backend...'}
-        </div>
-        {backendError && (
+    // Show error screen if there's a backend error
+    if (backendError) {
+      return (
+        <div className="fixed inset-0 bg-black flex flex-col items-center justify-center">
+          <div className="text-amber-200 text-sm tracking-[0.2em] uppercase mb-4">
+            Backend Error
+          </div>
           <div className="text-red-400 text-xs max-w-md text-center px-4">
             {backendError}
           </div>
-        )}
-        {!backendError && !isCheckingSetup && (
-          <div className="text-gray-500 text-xs">
-            First launch may take a few minutes to install dependencies
+        </div>
+      )
+    }
+
+    // Show simple loading during setup check
+    if (isCheckingSetup) {
+      return (
+        <div className="fixed inset-0 bg-black flex flex-col items-center justify-center">
+          <div className="text-amber-200 text-sm tracking-[0.2em] uppercase mb-4">
+            Loading...
           </div>
-        )}
-      </div>
+        </div>
+      )
+    }
+
+    // Show setup progress screen while initializing backend
+    return (
+      <SetupProgress
+        onComplete={handleBackendReady}
+        onError={handleBackendError}
+      />
     )
   }
 

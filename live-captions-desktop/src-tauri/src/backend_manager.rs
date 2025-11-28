@@ -12,7 +12,25 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tokio::time::sleep;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+
+/// Progress update payload for frontend setup screen
+#[derive(serde::Serialize, Clone)]
+pub struct SetupProgress {
+    pub stage: String,
+    pub percent: u32,
+    pub detail: Option<String>,
+}
+
+/// Emit setup progress to frontend
+fn emit_progress(app_handle: &AppHandle, stage: &str, percent: u32, detail: Option<&str>) {
+    let _ = app_handle.emit("setup-progress", SetupProgress {
+        stage: stage.to_string(),
+        percent,
+        detail: detail.map(|s| s.to_string()),
+    });
+    println!("📊 Setup progress: {}% - {}", percent, stage);
+}
 
 /// Strip Windows extended-length path prefix (\\?\) to fix Command::new() issues
 /// This is necessary because Command::new() doesn't handle \\?\ prefix well with spaces
@@ -41,16 +59,18 @@ pub struct BackendManager {
 
 impl BackendManager {
     /// Ensure Python environment is extracted from bundled archive (first-run only)
-    fn ensure_python_extracted(resources_dir: &PathBuf) -> Result<PathBuf, String> {
+    fn ensure_python_extracted(resources_dir: &PathBuf, app_handle: &AppHandle) -> Result<PathBuf, String> {
         let python_dir = resources_dir.join("python-embed");
         let python_zip = resources_dir.join("python-embed.zip");
 
         // If python-embed directory already exists, we're good
         if python_dir.exists() && python_dir.join("python.exe").exists() {
             println!("✓ Python environment already extracted");
+            emit_progress(app_handle, "Python environment ready", 10, None);
             return Ok(python_dir);
         }
 
+        emit_progress(app_handle, "Extracting Python environment...", 5, Some("First-time setup - this may take 30-60 seconds"));
         println!("📦 First run detected - extracting Python environment...");
 
         // Validate ZIP exists
@@ -109,21 +129,24 @@ impl BackendManager {
             }
         }
 
+        emit_progress(app_handle, "Python environment extracted", 10, None);
         println!("✓ Python environment ready at: {:?}", python_dir);
         Ok(python_dir)
     }
 
     /// Ensure backend is extracted from bundled archive (first-run only)
-    fn ensure_backend_extracted(resources_dir: &PathBuf) -> Result<PathBuf, String> {
+    fn ensure_backend_extracted(resources_dir: &PathBuf, app_handle: &AppHandle) -> Result<PathBuf, String> {
         let backend_dir = resources_dir.join("backend");
         let backend_zip = resources_dir.join("backend.zip");
 
         // If backend directory already exists, we're good
         if backend_dir.exists() && backend_dir.join("app").exists() {
             println!("✓ Backend already extracted");
+            emit_progress(app_handle, "Backend files ready", 20, None);
             return Ok(backend_dir);
         }
 
+        emit_progress(app_handle, "Extracting backend files...", 15, None);
         println!("📦 First run detected - extracting backend...");
 
         // Validate ZIP exists
@@ -183,20 +206,23 @@ impl BackendManager {
             }
         }
 
+        emit_progress(app_handle, "Backend files extracted", 20, None);
         println!("✓ Backend files ready at: {:?}", backend_dir);
         Ok(backend_dir)
     }
 
     /// Install Python dependencies on first run
-    fn install_dependencies(python_dir: &PathBuf, backend_dir: &PathBuf) -> Result<(), String> {
+    fn install_dependencies(python_dir: &PathBuf, backend_dir: &PathBuf, app_handle: &AppHandle) -> Result<(), String> {
         let deps_marker = python_dir.join(".deps_installed");
 
         // Skip if already installed
         if deps_marker.exists() {
             println!("✓ Dependencies already installed");
+            emit_progress(app_handle, "Dependencies ready", 50, None);
             return Ok(());
         }
 
+        emit_progress(app_handle, "Installing dependencies...", 30, Some("This may take several minutes on first launch"));
         println!("📦 First run detected - installing Python dependencies...");
         println!("⏳ This may take 2-3 minutes...");
 
@@ -208,6 +234,7 @@ impl BackendManager {
             println!("⚠ No requirements.txt found, skipping dependency installation");
             // Create marker anyway to avoid repeated checks
             let _ = fs::write(&deps_marker, "");
+            emit_progress(app_handle, "Dependencies ready", 50, None);
             return Ok(());
         }
 
@@ -245,11 +272,12 @@ impl BackendManager {
         // Create marker file to indicate successful installation
         fs::write(&deps_marker, "").map_err(|e| format!("Failed to create deps marker: {}", e))?;
 
+        emit_progress(app_handle, "Dependencies installed", 50, None);
         Ok(())
     }
 
     /// Check if CUDA torch is installed, if not download and install it (one-time setup)
-    async fn ensure_cuda_torch(python_dir: &PathBuf) -> Result<(), String> {
+    async fn ensure_cuda_torch(python_dir: &PathBuf, app_handle: &AppHandle) -> Result<(), String> {
         let python_exe = python_dir.join("python.exe");
         let python_exe_normalized = normalize_path(&python_exe);
 
@@ -257,9 +285,11 @@ impl BackendManager {
         let cuda_marker = python_dir.join(".cuda_torch_installed");
         if cuda_marker.exists() {
             println!("✓ CUDA PyTorch already installed");
+            emit_progress(app_handle, "GPU support ready", 70, None);
             return Ok(());
         }
 
+        emit_progress(app_handle, "Checking GPU support...", 55, None);
         // Check if CUDA is available on the system
         println!("🔍 Checking for NVIDIA GPU...");
 
@@ -275,6 +305,7 @@ impl BackendManager {
                     println!("✓ CUDA PyTorch already available");
                     // Create marker so we don't check again
                     let _ = fs::write(&cuda_marker, "cuda");
+                    emit_progress(app_handle, "GPU acceleration enabled", 70, None);
                     return Ok(());
                 }
             }
@@ -297,10 +328,12 @@ impl BackendManager {
         if !has_nvidia {
             println!("ℹ No NVIDIA GPU detected - using CPU mode");
             let _ = fs::write(&cuda_marker, "cpu");
+            emit_progress(app_handle, "Using CPU mode (no GPU detected)", 70, None);
             return Ok(());
         }
 
         println!("✓ NVIDIA GPU detected!");
+        emit_progress(app_handle, "Downloading CUDA PyTorch...", 60, Some("One-time download (~2.5GB) - this may take a few minutes"));
         println!("📦 Downloading CUDA PyTorch (one-time setup, ~2.5GB)...");
         println!("   This may take a few minutes depending on your internet speed...");
 
@@ -328,6 +361,8 @@ impl BackendManager {
             let stderr = String::from_utf8_lossy(&install_output.stderr);
             eprintln!("⚠ CUDA torch installation failed: {}", stderr);
             eprintln!("   Falling back to CPU mode");
+
+            emit_progress(app_handle, "GPU setup failed, using CPU mode", 70, Some("Performance may be reduced"));
 
             // Reinstall CPU torch
             let _ = Command::new(&python_exe_normalized)
@@ -358,12 +393,14 @@ impl BackendManager {
         // Create marker
         let _ = fs::write(&cuda_marker, "cuda_installed");
 
+        emit_progress(app_handle, "GPU acceleration enabled", 70, None);
         Ok(())
     }
 
     /// Create a new backend manager and start the Python backend
     pub async fn new(app_handle: &AppHandle) -> Result<Self, String> {
         println!("🐍 Initializing embedded Python backend...");
+        emit_progress(app_handle, "Initializing...", 0, Some("Starting Stygian backend"));
 
         // Find an available port
         let port = Self::find_available_port()?;
@@ -376,16 +413,16 @@ impl BackendManager {
             .map_err(|e| format!("Failed to get resource directory: {}", e))?;
 
         // Ensure Python is extracted (first-run only)
-        let python_dir = Self::ensure_python_extracted(&resources_dir)?;
+        let python_dir = Self::ensure_python_extracted(&resources_dir, app_handle)?;
 
         // Ensure backend is extracted (first-run only)
-        let backend_dir = Self::ensure_backend_extracted(&resources_dir)?;
+        let backend_dir = Self::ensure_backend_extracted(&resources_dir, app_handle)?;
 
         // Install dependencies from requirements.txt (first-run only)
-        Self::install_dependencies(&python_dir, &backend_dir)?;
+        Self::install_dependencies(&python_dir, &backend_dir, app_handle)?;
 
         // Check and install CUDA torch if needed (one-time download)
-        Self::ensure_cuda_torch(&python_dir).await?;
+        Self::ensure_cuda_torch(&python_dir, app_handle).await?;
 
         let python_exe = python_dir.join("python.exe");
         let main_py = backend_dir.join("app").join("main.py");
@@ -417,6 +454,8 @@ impl BackendManager {
         println!("✓ Backend directory: {:?}", backend_dir_normalized);
         println!("✓ Main script: {:?}", main_py_normalized);
 
+        emit_progress(app_handle, "Starting backend server...", 80, None);
+
         // Spawn Python process using module syntax for proper imports
         let process = Command::new(&python_exe_normalized)
             .arg("-u") // Unbuffered output for real-time logs
@@ -444,7 +483,11 @@ impl BackendManager {
         };
 
         // Wait for backend to be ready
-        manager.wait_for_health().await?;
+        manager.wait_for_health(app_handle).await?;
+
+        // Emit setup complete event
+        emit_progress(app_handle, "Ready!", 100, None);
+        let _ = app_handle.emit("setup-complete", ());
 
         Ok(manager)
     }
@@ -455,6 +498,7 @@ impl BackendManager {
     }
 
     /// Get the port number the backend is running on
+    #[allow(dead_code)]
     pub fn get_port(&self) -> u16 {
         self.port
     }
@@ -476,9 +520,14 @@ impl BackendManager {
         Err("No available ports in range 8000-9000. Please close some applications.".to_string())
     }
 
-    /// Wait for backend health endpoint to respond (max 120 seconds for model loading)
-    async fn wait_for_health(&mut self) -> Result<(), String> {
-        println!("⏳ Waiting for backend health check...");
+    /// Wait for backend health endpoint to respond (max 600 seconds for first-launch setup)
+    /// This timeout is generous because:
+    /// - First launch may require pip install of large packages (torch ~2GB)
+    /// - Model loading (Whisper) can take 30-60 seconds
+    /// - CUDA initialization adds overhead
+    async fn wait_for_health(&mut self, app_handle: &AppHandle) -> Result<(), String> {
+        emit_progress(app_handle, "Starting AI models...", 85, Some("Loading Whisper transcription model"));
+        println!("⏳ Waiting for backend to start (this may take a few minutes on first launch)...");
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(2))
@@ -486,8 +535,9 @@ impl BackendManager {
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
         let health_url = format!("{}/health", self.backend_url);
+        let max_attempts = 600; // 10 minutes max for first-launch scenarios
 
-        for attempt in 1..=120 {
+        for attempt in 1..=max_attempts {
             // Check if process is still alive
             if let Some(ref mut process) = self.process {
                 if let Ok(Some(status)) = process.try_wait() {
@@ -523,20 +573,35 @@ impl BackendManager {
             // Try health check
             match client.get(&health_url).send().await {
                 Ok(response) if response.status().is_success() => {
-                    println!("✓ Backend is healthy! (attempt {}/120)", attempt);
+                    println!("✓ Backend is healthy! (took {} seconds)", attempt);
                     println!("✓ Backend ready at: {}", self.backend_url);
+                    emit_progress(app_handle, "Backend ready!", 95, None);
                     return Ok(());
                 }
                 Ok(response) => {
                     println!(
-                        "⚠ Health check returned status: {} (attempt {}/120)",
+                        "⚠ Health check returned status: {} (attempt {}/{})",
                         response.status(),
-                        attempt
+                        attempt,
+                        max_attempts
                     );
                 }
-                Err(e) => {
-                    if attempt == 1 || attempt % 10 == 0 {
-                        println!("⏳ Waiting for backend... (attempt {}/120): {}", attempt, e);
+                Err(_e) => {
+                    // Update frontend progress every 10 seconds
+                    if attempt % 10 == 0 {
+                        let elapsed_secs = attempt;
+                        let detail = format!("Waiting for AI models... ({} seconds)", elapsed_secs);
+                        emit_progress(app_handle, "Loading AI models...", 90, Some(&detail));
+                    }
+                    // Show progress every 30 seconds, or on first attempt
+                    if attempt == 1 || attempt % 30 == 0 {
+                        let minutes = attempt / 60;
+                        let seconds = attempt % 60;
+                        if minutes > 0 {
+                            println!("⏳ Still waiting for backend... ({}m {}s elapsed)", minutes, seconds);
+                        } else {
+                            println!("⏳ Waiting for backend... ({} seconds elapsed)", attempt);
+                        }
                     }
                 }
             }
@@ -545,7 +610,8 @@ impl BackendManager {
         }
 
         Err(format!(
-            "Backend failed to become healthy after 120 seconds. Check logs at: {:?}",
+            "Backend failed to become healthy after {} seconds. Check logs at: {:?}",
+            max_attempts,
             self.backend_url
         ))
     }
