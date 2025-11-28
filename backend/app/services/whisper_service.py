@@ -179,11 +179,13 @@ class WhisperService:
             logger.info(f"Loading Whisper model: {model_name} on {self.device}")
             start_time = time.time()
             
+            # Use default HuggingFace cache (~/.cache/huggingface/hub)
+            # Avoids issues with relative paths in installed apps
             self.models[model_name] = WhisperModel(
                 model_name,
                 device=self.device,
                 compute_type=self.compute_type,
-                download_root="./models",  # Cache models locally
+                download_root=None,  # Use HF default cache location
                 local_files_only=False
             )
             
