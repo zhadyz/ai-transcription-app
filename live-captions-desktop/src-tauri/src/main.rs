@@ -30,10 +30,18 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::Win32::Graphics::Dwm::*;
 
 #[derive(Clone, Serialize, Deserialize)]
+struct ModelInfo {
+    model_size: String,
+    device: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 struct CaptionPayload {
     text: String,
     language: String,
     timestamp: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_info: Option<ModelInfo>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -63,6 +71,7 @@ struct AppState {
     is_capturing: Arc<Mutex<bool>>,
     ws_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<f32>>>>>,
     config_tx: Arc<Mutex<Option<mpsc::UnboundedSender<ConfigUpdate>>>>,
+    ws_shutdown_tx: Arc<Mutex<Option<mpsc::UnboundedSender<()>>>>,  // WebSocket shutdown signal
     log_file: Arc<Mutex<Option<BufWriter<File>>>>,
     log_dir: Arc<Mutex<PathBuf>>,
     discord_webhook: Arc<Mutex<Option<String>>>,
@@ -356,9 +365,16 @@ async fn check_backend_health() -> bool {
 }
 
 /// Get the backend URL (dynamic port from backend manager)
+/// Returns empty string if backend is not ready yet - frontend should wait for backend-status event
 #[tauri::command]
 fn get_backend_url(state: State<'_, AppState>) -> String {
     let url = state.backend_url.lock().unwrap();
+    // Return empty string if not initialized - frontend checks for this
+    if url.is_empty() {
+        println!("⏳ [get_backend_url] Backend URL not ready yet");
+        return String::new();
+    }
+    println!("✓ [get_backend_url] Returning: {}", url);
     url.clone()
 }
 
@@ -559,15 +575,28 @@ async fn start_capture(
     let (config_tx, mut config_rx) = mpsc::unbounded_channel::<ConfigUpdate>();
     *state.config_tx.lock().unwrap() = Some(config_tx);
 
+    // Create shutdown signal channel for clean WebSocket closure
+    let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel::<()>();
+    *state.ws_shutdown_tx.lock().unwrap() = Some(shutdown_tx);
+
     // Spawn WebSocket task
     let app_handle_ws = app_handle.clone();
     let log_file_clone = state.log_file.clone();
     let log_dir_clone = state.log_dir.clone();
     let discord_webhook_clone = state.discord_webhook.clone();
 
-    // Get backend URL from state
+    // Get backend URL from state - VALIDATE it's not empty
     let backend_url = {
         let url = state.backend_url.lock().unwrap();
+        if url.is_empty() {
+            eprintln!("❌ [start_capture] Backend URL is empty! Backend may not have initialized.");
+            return Err("Backend URL not initialized. Please wait for backend to start.".to_string());
+        }
+        if !url.starts_with("http://127.0.0.1:") {
+            eprintln!("❌ [start_capture] Invalid backend URL format: {}", url);
+            return Err(format!("Invalid backend URL: {}", url));
+        }
+        println!("✓ [start_capture] Using backend URL: {}", url);
         url.clone()
     };
 
@@ -669,120 +698,146 @@ async fn start_capture(
                     println!("[CONFIG_RX] ⚠ Config update listener exited");
                 });
 
-                // Receive captions
-                while let Some(msg) = read.next().await {
-                    println!("[WS] Received message from backend");
+                // Receive captions - with shutdown signal handling
+                loop {
+                    tokio::select! {
+                        // Listen for shutdown signal
+                        _ = shutdown_rx.recv() => {
+                            println!("[WS_TASK_{}] 🛑 Shutdown signal received, closing WebSocket cleanly...", task_id);
+                            // Send close message to backend
+                            let mut write_guard = write.lock().await;
+                            let _ = write_guard.send(Message::Close(None)).await;
+                            drop(write_guard);
+                            break;
+                        }
+                        // Listen for WebSocket messages
+                        msg = read.next() => {
+                            match msg {
+                                Some(Ok(Message::Text(text))) => {
+                                    println!("[WS] Message type: Text");
+                                    println!("[WS] Raw text: {}", text);
 
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            println!("[WS] Message type: Text");
-                            println!("[WS] Raw text: {}", text);
+                                    match serde_json::from_str::<serde_json::Value>(&text) {
+                                        Ok(data) => {
+                                            println!("[WS] JSON parsed successfully");
+                                            println!("[WS] Message type field: {:?}", data.get("type"));
 
-                            match serde_json::from_str::<serde_json::Value>(&text) {
-                                Ok(data) => {
-                                    println!("[WS] JSON parsed successfully");
-                                    println!("[WS] Message type field: {:?}", data.get("type"));
+                                            if data["type"] == "caption" {
+                                                println!("[WS] ✓ Caption message detected");
 
-                                    if data["type"] == "caption" {
-                                        println!("[WS] ✓ Caption message detected");
-                                        let caption = CaptionPayload {
-                                            text: data["text"].as_str().unwrap_or("").to_string(),
-                                            language: data["language"].as_str().unwrap_or("en").to_string(),
-                                            timestamp: data["timestamp"].as_u64().unwrap_or(0),
-                                        };
+                                                // Parse model_info if present (for debugging)
+                                                let model_info = if let Some(mi) = data.get("model_info") {
+                                                    Some(ModelInfo {
+                                                        model_size: mi["model_size"].as_str().unwrap_or("unknown").to_string(),
+                                                        device: mi["device"].as_str().unwrap_or("unknown").to_string(),
+                                                    })
+                                                } else {
+                                                    None
+                                                };
 
-                                        println!("📝 Caption: {}", caption.text);
+                                                let caption = CaptionPayload {
+                                                    text: data["text"].as_str().unwrap_or("").to_string(),
+                                                    language: data["language"].as_str().unwrap_or("en").to_string(),
+                                                    timestamp: data["timestamp"].as_u64().unwrap_or(0),
+                                                    model_info: model_info.clone(),
+                                                };
 
-                                        // Write to log file (lazy initialization on first caption)
-                                        if let Err(e) = write_caption_to_log(&log_file_clone, &log_dir_clone, &caption.text, &caption.language) {
-                                            eprintln!("⚠ Failed to write caption to log: {}", e);
-                                        }
-
-                                        // POST to Discord webhook
-                                        let webhook_check = discord_webhook_clone.lock().unwrap().clone();
-                                        println!("[DEBUG] Checking Discord webhook: {:?}", webhook_check);
-                                        if let Some(webhook_url) = webhook_check {
-                                            println!("[DEBUG] Discord webhook found, posting caption...");
-                                            let client = reqwest::Client::new();
-                                            let discord_payload = serde_json::json!({
-                                                "content": &caption.text
-                                            });
-
-                                            let webhook_url_clone = webhook_url.clone();
-                                            tokio::spawn(async move {
-                                                println!("[DEBUG] Sending POST to Discord webhook...");
-                                                match client.post(&webhook_url_clone)
-                                                    .json(&discord_payload)
-                                                    .send()
-                                                    .await
-                                                {
-                                                    Ok(resp) => println!("✓ Posted caption to Discord (status: {})", resp.status()),
-                                                    Err(e) => eprintln!("⚠ Failed to post to Discord: {}", e),
+                                                // 🎯 DEBUG: Log actual model being used
+                                                if let Some(ref mi) = model_info {
+                                                    println!("📝 Caption [model={}|device={}]: {}", mi.model_size, mi.device, caption.text);
+                                                } else {
+                                                    println!("📝 Caption: {}", caption.text);
                                                 }
-                                            });
-                                        } else {
-                                            println!("[DEBUG] No Discord webhook configured");
-                                        }
 
-                                        // Emit to the OVERLAY window
-                                        if let Some(overlay) = app_handle_ws.get_webview_window("overlay") {
-                                            println!("[EMIT] Emitting caption to overlay window...");
-                                            match overlay.emit("caption", &caption) {
-                                                Ok(_) => println!("✓ Caption emitted to overlay window successfully"),
-                                                Err(e) => eprintln!("❌ Failed to emit caption to overlay: {}", e),
+                                                // Write to log file (lazy initialization on first caption)
+                                                if let Err(e) = write_caption_to_log(&log_file_clone, &log_dir_clone, &caption.text, &caption.language) {
+                                                    eprintln!("⚠ Failed to write caption to log: {}", e);
+                                                }
+
+                                                // POST to Discord webhook
+                                                let webhook_check = discord_webhook_clone.lock().unwrap().clone();
+                                                println!("[DEBUG] Checking Discord webhook: {:?}", webhook_check);
+                                                if let Some(webhook_url) = webhook_check {
+                                                    println!("[DEBUG] Discord webhook found, posting caption...");
+                                                    let client = reqwest::Client::new();
+                                                    let discord_payload = serde_json::json!({
+                                                        "content": &caption.text
+                                                    });
+
+                                                    let webhook_url_clone = webhook_url.clone();
+                                                    tokio::spawn(async move {
+                                                        println!("[DEBUG] Sending POST to Discord webhook...");
+                                                        match client.post(&webhook_url_clone)
+                                                            .json(&discord_payload)
+                                                            .send()
+                                                            .await
+                                                        {
+                                                            Ok(resp) => println!("✓ Posted caption to Discord (status: {})", resp.status()),
+                                                            Err(e) => eprintln!("⚠ Failed to post to Discord: {}", e),
+                                                        }
+                                                    });
+                                                } else {
+                                                    println!("[DEBUG] No Discord webhook configured");
+                                                }
+
+                                                // Emit to ALL windows (main + overlay) so both can receive captions
+                                                println!("[EMIT] Emitting caption to all windows...");
+                                                match app_handle_ws.emit("caption", &caption) {
+                                                    Ok(_) => println!("✓ Caption emitted to all windows successfully"),
+                                                    Err(e) => eprintln!("❌ Failed to emit caption: {}", e),
+                                                }
+                                            } else if data["type"] == "translation" {
+                                                println!("[WS] ✓ Translation message detected");
+                                                let translation = CaptionPayload {
+                                                    text: data["text"].as_str().unwrap_or("").to_string(),
+                                                    language: data["language"].as_str().unwrap_or("").to_string(),
+                                                    timestamp: data["timestamp"].as_u64().unwrap_or(0),
+                                                    model_info: None,  // Translations don't carry model info
+                                                };
+
+                                                println!("🌐 Translation: {}", translation.text);
+
+                                                // Emit translation to ALL windows (main + overlay)
+                                                println!("[EMIT] Emitting translation to all windows...");
+                                                match app_handle_ws.emit("translation", &translation) {
+                                                    Ok(_) => println!("✓ Translation emitted to all windows successfully"),
+                                                    Err(e) => eprintln!("❌ Failed to emit translation: {}", e),
+                                                }
+                                            } else {
+                                                println!("[WS] Skipping non-caption/translation message (type: {:?})", data.get("type"));
                                             }
-                                        } else {
-                                            eprintln!("⚠ Overlay window not found, cannot emit caption");
                                         }
-                                    } else if data["type"] == "translation" {
-                                        println!("[WS] ✓ Translation message detected");
-                                        let translation = CaptionPayload {
-                                            text: data["text"].as_str().unwrap_or("").to_string(),
-                                            language: data["language"].as_str().unwrap_or("").to_string(),
-                                            timestamp: data["timestamp"].as_u64().unwrap_or(0),
-                                        };
-
-                                        println!("🌐 Translation: {}", translation.text);
-
-                                        // Emit translation as separate event type
-                                        if let Some(overlay) = app_handle_ws.get_webview_window("overlay") {
-                                            println!("[EMIT] Emitting translation to overlay window...");
-                                            match overlay.emit("translation", &translation) {
-                                                Ok(_) => println!("✓ Translation emitted to overlay window successfully"),
-                                                Err(e) => eprintln!("❌ Failed to emit translation to overlay: {}", e),
-                                            }
-                                        } else {
-                                            eprintln!("⚠ Overlay window not found, cannot emit translation");
+                                        Err(e) => {
+                                            eprintln!("[WS] ❌ JSON parsing failed: {}", e);
+                                            eprintln!("[WS] Raw text was: {}", text);
                                         }
-                                    } else {
-                                        println!("[WS] Skipping non-caption/translation message (type: {:?})", data.get("type"));
                                     }
                                 }
-                                Err(e) => {
-                                    eprintln!("[WS] ❌ JSON parsing failed: {}", e);
-                                    eprintln!("[WS] Raw text was: {}", text);
+                                Some(Ok(Message::Binary(bytes))) => {
+                                    println!("[WS] Message type: Binary ({} bytes)", bytes.len());
+                                }
+                                Some(Ok(Message::Ping(_))) => {
+                                    println!("[WS] Message type: Ping");
+                                }
+                                Some(Ok(Message::Pong(_))) => {
+                                    println!("[WS] Message type: Pong");
+                                }
+                                Some(Ok(Message::Close(_))) => {
+                                    println!("[WS] Message type: Close");
+                                    break;
+                                }
+                                Some(Ok(msg)) => {
+                                    println!("[WS] Message type: Other ({:?})", msg);
+                                }
+                                Some(Err(e)) => {
+                                    eprintln!("[WS] ❌ Error receiving message: {}", e);
+                                    break;
+                                }
+                                None => {
+                                    println!("[WS] WebSocket stream ended");
+                                    break;
                                 }
                             }
-                        }
-                        Ok(Message::Binary(bytes)) => {
-                            println!("[WS] Message type: Binary ({} bytes)", bytes.len());
-                        }
-                        Ok(Message::Ping(_)) => {
-                            println!("[WS] Message type: Ping");
-                        }
-                        Ok(Message::Pong(_)) => {
-                            println!("[WS] Message type: Pong");
-                        }
-                        Ok(Message::Close(_)) => {
-                            println!("[WS] Message type: Close");
-                            break;
-                        }
-                        Ok(msg) => {
-                            println!("[WS] Message type: Other ({:?})", msg);
-                        }
-                        Err(e) => {
-                            eprintln!("[WS] ❌ Error receiving message: {}", e);
-                            break;
                         }
                     }
                 }
@@ -839,6 +894,19 @@ async fn update_capture_config(
 
 #[tauri::command]
 async fn stop_capture(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    println!("[STOP_CAPTURE] Initiating clean shutdown...");
+
+    // Send shutdown signal to WebSocket task FIRST (before clearing channels)
+    // This ensures the WebSocket sends a proper Close frame to the backend
+    // NOTE: Must drop the MutexGuard before await to avoid Send issues
+    let shutdown_tx = state.ws_shutdown_tx.lock().unwrap().take();
+    if let Some(tx) = shutdown_tx {
+        println!("[STOP_CAPTURE] Sending WebSocket shutdown signal...");
+        let _ = tx.send(());
+        // Give the WebSocket task a moment to close cleanly
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
     let mut is_capturing = state.is_capturing.lock().unwrap();
     *is_capturing = false;
     *state.ws_tx.lock().unwrap() = None;
@@ -856,7 +924,7 @@ async fn stop_capture(app_handle: AppHandle, state: State<'_, AppState>) -> Resu
         println!("✓ Overlay window hidden");
     }
 
-    println!("✓ Capture stopped");
+    println!("✓ Capture stopped cleanly");
 
     Ok("Capture stopped".to_string())
 }
@@ -1247,15 +1315,90 @@ fn check_system_requirements() -> SystemRequirements {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// INTERVIEW ASSISTANT COMMANDS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Send interview context to backend via WebSocket
+#[tauri::command]
+async fn send_interview_context(
+    _context: serde_json::Value,
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    // TODO: Implement interview context sending via WebSocket
+    // This will be implemented when backend interview service is ready
+    println!("[Interview] Context received (stub - will send to backend)");
+    Ok("Context sent (stub)".to_string())
+}
+
+/// Start interview session
+#[tauri::command]
+async fn start_interview_session(
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    // TODO: Implement interview session start
+    // This will notify backend to enable interview mode
+    println!("[Interview] Session started (stub)");
+    Ok("Session started (stub)".to_string())
+}
+
+/// Stop interview session
+#[tauri::command]
+async fn stop_interview_session(
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    // TODO: Implement interview session stop
+    // This will notify backend to disable interview mode
+    println!("[Interview] Session stopped (stub)");
+    Ok("Session stopped (stub)".to_string())
+}
+
+/// Force generate response for current question
+#[tauri::command]
+async fn force_generate_response(
+    _question: String,
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    // TODO: Implement forced response generation
+    // This will send message to backend to generate response
+    println!("[Interview] Force generate response (stub)");
+    Ok("Response generation forced (stub)".to_string())
+}
+
+/// Regenerate last response
+#[tauri::command]
+async fn regenerate_response(
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    // TODO: Implement response regeneration
+    // This will request backend to regenerate last response
+    println!("[Interview] Regenerate response (stub)");
+    Ok("Response regenerated (stub)".to_string())
+}
+
+/// Update interview setting mid-session
+#[tauri::command]
+async fn update_interview_setting(
+    _key: String,
+    _value: serde_json::Value,
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    // TODO: Implement setting update
+    // This will send setting change to backend
+    println!("[Interview] Setting updated (stub)");
+    Ok("Setting updated (stub)".to_string())
+}
+
 fn main() {
     let app_state = AppState {
         is_capturing: Arc::new(Mutex::new(false)),
         ws_tx: Arc::new(Mutex::new(None)),
         config_tx: Arc::new(Mutex::new(None)),
+        ws_shutdown_tx: Arc::new(Mutex::new(None)),  // WebSocket shutdown signal
         log_file: Arc::new(Mutex::new(None)),
         log_dir: Arc::new(Mutex::new(PathBuf::new())),
         discord_webhook: Arc::new(Mutex::new(None)),
-        backend_url: Arc::new(Mutex::new(String::from("http://127.0.0.1:8000"))), // Default, updated on startup
+        backend_url: Arc::new(Mutex::new(String::new())), // Default, updated on startup
     };
 
     tauri::Builder::default()
@@ -1278,6 +1421,19 @@ fn main() {
             let backend_url_arc = state.backend_url.clone();
 
             tauri::async_runtime::spawn(async move {
+                // Check for external backend URL (development mode)
+                if let Ok(external_url) = std::env::var("EXTERNAL_BACKEND_URL") {
+                    println!("🔧 Development mode: Using external backend at {}", external_url);
+                    *backend_url_arc.lock().unwrap() = external_url.clone();
+
+                    let _ = app_handle.emit("backend-status", serde_json::json!({
+                        "status": "ready",
+                        "url": external_url,
+                        "mode": "external"
+                    }));
+                    return;
+                }
+
                 println!("🚀 Starting embedded Python backend...");
 
                 match BackendManager::new(&app_handle).await {
@@ -1295,7 +1451,82 @@ fn main() {
                         }));
 
                         // Store backend manager in app state for cleanup
-                        app_handle.manage(Arc::new(Mutex::new(manager)));
+                        let manager_arc = Arc::new(TokioMutex::new(manager));
+                        app_handle.manage(manager_arc.clone());
+
+                        // Start background health monitoring task
+                        let app_handle_monitor = app_handle.clone();
+                        let backend_url_monitor = backend_url_arc.clone();
+                        let manager_monitor = manager_arc.clone();
+
+                        tokio::spawn(async move {
+                            println!("🔍 Backend health monitor started (checking every 10 seconds)");
+                            let mut consecutive_failures = 0u32;
+
+                            loop {
+                                // Wait before checking (first check after 10 seconds)
+                                sleep(Duration::from_secs(10)).await;
+
+                                // Check health
+                                let mut manager = manager_monitor.lock().await;
+                                let is_healthy = manager.is_healthy().await;
+                                drop(manager); // Release lock immediately
+
+                                if is_healthy {
+                                    if consecutive_failures > 0 {
+                                        println!("✓ Backend recovered after {} failures", consecutive_failures);
+                                        consecutive_failures = 0;
+                                    }
+                                } else {
+                                    consecutive_failures += 1;
+                                    println!("⚠ Backend health check failed ({} consecutive failures)", consecutive_failures);
+
+                                    // After 5 consecutive failures, attempt restart
+                                    // (Increased from 2 to allow for temporary GPU stalls)
+                                    if consecutive_failures >= 5 {
+                                        println!("🔄 Attempting to restart backend...");
+
+                                        // Emit restarting status
+                                        let _ = app_handle_monitor.emit("backend-status", serde_json::json!({
+                                            "status": "restarting",
+                                            "message": "Backend crashed, restarting..."
+                                        }));
+
+                                        // Attempt restart
+                                        let mut manager = manager_monitor.lock().await;
+                                        match manager.restart().await {
+                                            Ok(()) => {
+                                                let new_url = manager.get_backend_url();
+                                                println!("✓ Backend restarted successfully at: {}", new_url);
+
+                                                // Update backend URL in app state
+                                                *backend_url_monitor.lock().unwrap() = new_url.clone();
+
+                                                // Emit ready status with new URL
+                                                let _ = app_handle_monitor.emit("backend-status", serde_json::json!({
+                                                    "status": "ready",
+                                                    "url": new_url
+                                                }));
+
+                                                consecutive_failures = 0;
+                                            }
+                                            Err(e) => {
+                                                eprintln!("❌ Backend restart failed: {}", e);
+
+                                                // Emit error status
+                                                let _ = app_handle_monitor.emit("backend-status", serde_json::json!({
+                                                    "status": "error",
+                                                    "error": format!("Backend restart failed: {}", e)
+                                                }));
+
+                                                // Don't exit the loop, keep trying
+                                            }
+                                        }
+                                        drop(manager);
+                                    }
+                                }
+                            }
+                        });
                     }
                     Err(e) => {
                         eprintln!("❌ Backend initialization failed: {}", e);
@@ -1309,12 +1540,11 @@ fn main() {
                         // Show error dialog to user
                         use tauri::Manager;
                         if let Some(main_window) = app_handle.get_webview_window("main") {
-                            let _ = tauri::async_runtime::block_on(async {
-                                main_window.eval(&format!(
-                                    "alert('Backend initialization failed:\\n\\n{}\\n\\nThe application may not work correctly.');",
-                                    e.replace("'", "\\'")
-                                ))
-                            });
+                            // We're already in an async context, no need for block_on
+                            let _ = main_window.eval(&format!(
+                                "alert('Backend initialization failed:\\n\\n{}\\n\\nThe application may not work correctly.');",
+                                e.replace("'", "\\'")
+                            ));
                         }
                     }
                 }
@@ -1370,13 +1600,20 @@ fn main() {
             is_setup_complete,
             mark_setup_complete,
             check_system_requirements,
-            get_backend_url
+            get_backend_url,
+            send_interview_context,
+            start_interview_session,
+            stop_interview_session,
+            force_generate_response,
+            regenerate_response,
+            update_interview_setting
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Cleanup backend on app exit
-                if let Some(manager_state) = window.app_handle().try_state::<Arc<Mutex<BackendManager>>>() {
-                    let mut manager = manager_state.lock().unwrap();
+                if let Some(manager_state) = window.app_handle().try_state::<Arc<TokioMutex<BackendManager>>>() {
+                    // Use blocking lock since we're in sync context
+                    let mut manager = tauri::async_runtime::block_on(manager_state.lock());
                     manager.shutdown();
                 }
             }

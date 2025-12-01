@@ -7,9 +7,17 @@
  * Uses Tauri commands to interact with Rust backend for audio capture.
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+
+/**
+ * Map frontend model names to backend model names
+ * Frontend uses 'large-v2' but backend uses 'large-v3'
+ */
+const mapModelName = (name: string): string => {
+  return name === 'large-v2' ? 'large-v3' : name;
+};
 
 export interface LiveCaptureSettings {
   language?: string | null;
@@ -17,10 +25,15 @@ export interface LiveCaptureSettings {
   fontSize: 'small' | 'medium' | 'large' | 'xlarge';
   position: 'top' | 'bottom' | 'center';
   showTranslation: boolean;
-  modelSize: 'small' | 'medium' | 'large' | 'large-v2';
+  modelSize: 'tiny' | 'small' | 'medium' | 'large' | 'large-v2';
   audioSource: 'microphone' | 'system';
   discordWebhook?: string | null;
   discordEnabled: boolean;
+}
+
+export interface ModelInfo {
+  model_size: string;
+  device: string;
 }
 
 export interface Caption {
@@ -30,6 +43,7 @@ export interface Caption {
   timestamp: number;
   translation?: string;
   translationLanguage?: string;
+  modelInfo?: ModelInfo;  // 🎯 DEBUG: Track which model produced this caption
 }
 
 interface LiveCaptureContextValue {
@@ -40,11 +54,14 @@ interface LiveCaptureContextValue {
   currentCaption: Caption | null;
   error: string | null;
   settings: LiveCaptureSettings;
+  currentModelInfo: ModelInfo | null;  // 🎯 DEBUG: Track current model
+  isModelSwitching: boolean;  // True when model switch is in progress
 
   // Actions
   start: () => Promise<void>;
   stop: () => void;
   updateSettings: (settings: Partial<LiveCaptureSettings>) => void;
+  checkModelAvailable: (modelSize: string) => Promise<boolean>;
 
   // Capabilities
   isSupported: boolean;
@@ -71,6 +88,9 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
   const [volume, setVolume] = useState(0);
   const [currentCaption, setCurrentCaption] = useState<Caption | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentModelInfo, setCurrentModelInfo] = useState<ModelInfo | null>(null);  // 🎯 DEBUG
+  const [isModelSwitching, setIsModelSwitching] = useState(false);  // Track model switch in progress
+  const backendUrlRef = useRef<string | null>(null);
   const [settings, setSettings] = useState<LiveCaptureSettings>(() => {
     // Load saved settings from localStorage
     const saved = localStorage.getItem('liveCaptureSettings');
@@ -87,7 +107,7 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
       fontSize: 'large',
       position: 'bottom',
       showTranslation: false,
-      modelSize: 'medium',
+      modelSize: 'tiny',  // Use tiny for realtime to avoid memory-intensive model switch
       audioSource: 'microphone',
       discordWebhook: null,
       discordEnabled: false,
@@ -96,6 +116,53 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
 
   // Tauri desktop always supports audio capture via Rust backend
   const isSupported = true;
+
+  /**
+   * Get backend URL from Tauri on mount
+   */
+  useEffect(() => {
+    const getBackendUrl = async () => {
+      try {
+        const url = await invoke<string>('get_backend_url');
+        backendUrlRef.current = url;
+        console.log('[LiveCapture] Backend URL:', url);
+      } catch (err) {
+        console.error('[LiveCapture] Failed to get backend URL:', err);
+      }
+    };
+    getBackendUrl();
+  }, []);
+
+  /**
+   * Check if a model is available (downloaded) on the backend
+   * Returns true if model is ready for use, false if needs downloading
+   */
+  const checkModelAvailable = useCallback(async (modelSize: string): Promise<boolean> => {
+    const backendUrl = backendUrlRef.current;
+    if (!backendUrl) {
+      console.warn('[LiveCapture] Backend URL not available, assuming model is ready');
+      return true;  // Optimistic fallback
+    }
+
+    const backendModelName = mapModelName(modelSize);
+
+    try {
+      console.log(`[LiveCapture] Checking if model '${backendModelName}' is downloaded...`);
+      const response = await fetch(`${backendUrl}/models/${backendModelName}/status`);
+
+      if (!response.ok) {
+        console.warn(`[LiveCapture] Model status check failed: ${response.status}`);
+        return true;  // Optimistic fallback - let backend handle missing model
+      }
+
+      const data = await response.json();
+      console.log(`[LiveCapture] Model '${backendModelName}' status:`, data);
+      return data.downloaded === true;
+    } catch (err) {
+      console.error('[LiveCapture] Error checking model status:', err);
+      return true;  // Optimistic fallback
+    }
+  }, []);
 
   /**
    * Start live capture - calls Rust backend
@@ -157,24 +224,75 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
 
   /**
    * Update settings and persist to localStorage
+   *
+   * Model changes trigger a clean stop/restart to avoid hot-swap issues.
+   * Translation changes are sent to backend mid-stream (safe operation).
+   *
+   * IMPORTANT: Before switching models, we check if the target model is downloaded.
+   * If not, we set an error and don't proceed with the switch.
    */
   const updateSettings = useCallback(async (newSettings: Partial<LiveCaptureSettings>) => {
+    // Check if model is changing while capture is active
+    const modelChanged = 'modelSize' in newSettings && newSettings.modelSize !== settings.modelSize;
+    const wasActive = isActive;
+
+    // If model changed during active capture, do clean restart
+    if (modelChanged && wasActive && newSettings.modelSize) {
+      console.log('[LiveCapture] Model change requested:', settings.modelSize, '→', newSettings.modelSize);
+
+      // Check if target model is downloaded BEFORE stopping capture
+      setIsModelSwitching(true);
+      setError(null);
+
+      const isAvailable = await checkModelAvailable(newSettings.modelSize);
+
+      if (!isAvailable) {
+        const modelName = mapModelName(newSettings.modelSize);
+        console.error(`[LiveCapture] Model '${modelName}' is not downloaded!`);
+        setIsModelSwitching(false);
+        setError(`Model '${modelName}' is not downloaded. Please download it first in Settings → Model Management.`);
+        return;  // Don't proceed with model switch
+      }
+
+      console.log('[LiveCapture] Model is available, performing clean restart...');
+      console.log('[LiveCapture] Old model:', settings.modelSize, '→ New model:', newSettings.modelSize);
+
+      // Stop current capture
+      await stop();
+
+      // Update settings (this also persists to localStorage)
+      setSettings((prev) => {
+        const updated = { ...prev, ...newSettings };
+        localStorage.setItem('liveCaptureSettings', JSON.stringify(updated));
+        return updated;
+      });
+
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Restart with new model
+      console.log('[LiveCapture] Restarting with new model...');
+      await start();
+
+      setIsModelSwitching(false);
+      return;
+    }
+
+    // Normal settings update (no model change, or not active)
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       localStorage.setItem('liveCaptureSettings', JSON.stringify(updated));
       return updated;
     });
 
-    // If capture is active and translation/model settings changed, update backend
+    // If capture is active and translation settings changed, update backend (safe mid-stream)
     if (isActive) {
-      const needsUpdate =
+      const needsTranslationUpdate =
         'translateTo' in newSettings ||
-        'showTranslation' in newSettings ||
-        'modelSize' in newSettings;
+        'showTranslation' in newSettings;
 
-      if (needsUpdate) {
+      if (needsTranslationUpdate) {
         try {
-          // Get the updated settings values
           const currentSettings = {
             ...settings,
             ...newSettings
@@ -183,20 +301,19 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
           await invoke('update_capture_config', {
             translateTo: currentSettings.showTranslation ? currentSettings.translateTo : null,
             showTranslation: currentSettings.showTranslation,
-            modelSize: currentSettings.modelSize
+            modelSize: currentSettings.modelSize  // Keep current model, no hot-swap
           });
 
-          console.log('[LiveCapture] Config updated on backend:', {
+          console.log('[LiveCapture] Translation config updated:', {
             translateTo: currentSettings.showTranslation ? currentSettings.translateTo : null,
-            showTranslation: currentSettings.showTranslation,
-            modelSize: currentSettings.modelSize
+            showTranslation: currentSettings.showTranslation
           });
         } catch (err) {
           console.error('[LiveCapture] Failed to update config:', err);
         }
       }
     }
-  }, [isActive, settings]);
+  }, [isActive, settings, stop, start]);
 
   /**
    * Listen for caption events from Rust backend
@@ -204,16 +321,37 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
   useEffect(() => {
     console.log('[LiveCapture] Setting up event listeners...');
 
-    const unlistenCaption = listen<{ text: string; language: string; timestamp: number }>(
+    const unlistenCaption = listen<{
+      text: string;
+      language: string;
+      timestamp: number;
+      model_info?: { model_size: string; device: string };
+    }>(
       'caption',
       (event) => {
-        console.log('[LiveCapture] Received caption:', event.payload);
+        // 🎯 DEBUG: Log with model info for troubleshooting
+        if (event.payload.model_info) {
+          console.log(
+            `[LiveCapture] 🎯 Caption [model=${event.payload.model_info.model_size}|device=${event.payload.model_info.device}]:`,
+            event.payload.text
+          );
+          setCurrentModelInfo({
+            model_size: event.payload.model_info.model_size,
+            device: event.payload.model_info.device,
+          });
+        } else {
+          console.log('[LiveCapture] Received caption:', event.payload);
+        }
 
         const caption: Caption = {
           id: `caption-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           text: event.payload.text,
           language: event.payload.language,
           timestamp: event.payload.timestamp,
+          modelInfo: event.payload.model_info ? {
+            model_size: event.payload.model_info.model_size,
+            device: event.payload.model_info.device,
+          } : undefined,
         };
 
         setCurrentCaption(caption);
@@ -259,9 +397,12 @@ export const LiveCaptureProvider: React.FC<LiveCaptureProviderProps> = ({ childr
     currentCaption,
     error,
     settings,
+    currentModelInfo,  // 🎯 DEBUG: Expose model info
+    isModelSwitching,  // Track model switch in progress
     start,
     stop,
     updateSettings,
+    checkModelAvailable,  // Allow components to check model availability
     isSupported,
   };
 
