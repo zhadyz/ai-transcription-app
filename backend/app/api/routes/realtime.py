@@ -90,7 +90,7 @@ async def realtime_transcription_websocket(websocket: WebSocket):
 
     active_realtime_sessions[session_id] = session_info
 
-    # Send connection confirmation
+    # Send connection confirmation WITH CURRENT MODEL INFO
     try:
         await websocket.send_json({
             "type": "connected",
@@ -99,6 +99,12 @@ async def realtime_transcription_websocket(websocket: WebSocket):
             "config": {
                 "sample_rate": 16000,
                 "min_chunk_duration": session_info["config"]["min_chunk_duration"]
+            },
+            # 🎯 DEBUG: Include actual model info on connection
+            "model_info": {
+                "model_size": transcription_service.model_size,
+                "device": transcription_service.device,
+                "compute_type": transcription_service.compute_type,
             }
         })
     except Exception as e:
@@ -265,21 +271,32 @@ async def handle_text_message(
             if 'min_chunk_duration' in message:
                 session_info["config"]["min_chunk_duration"] = float(message['min_chunk_duration'])
 
-            # Handle model size change (hotswap between realtime and accurate)
+            # Handle model size in config
+            # NOTE: Hot-swap is DISABLED - it causes connection instability.
+            # Model changes should happen via clean restart (stop capture → start with new model).
+            # We just record what model the client requested, but use whatever model is loaded.
             if 'model_size' in message:
-                model_size = message['model_size']
-                try:
-                    transcription_service = get_realtime_service()
-                    transcription_service.switch_model(model_size)
-                    session_info["config"]["model_size"] = model_size
-                    logger.info(f"[Realtime {session_id[:8]}] Model switched to '{model_size}'")
-                except Exception as e:
-                    logger.error(f"[Realtime {session_id[:8]}] Model switch failed: {e}")
+                requested_model = message['model_size']
+                transcription_service = get_realtime_service()
+                current_model = transcription_service.model_size
+
+                # Just log the request, don't actually switch
+                if requested_model != current_model:
+                    logger.info(
+                        f"[Realtime {session_id[:8]}] Client requested model '{requested_model}', "
+                        f"but using current model '{current_model}' (hot-swap disabled for stability)"
+                    )
+                    # Inform client which model is actually being used
                     await websocket.send_json({
-                        "type": "error",
-                        "message": f"Failed to switch model: {str(e)}"
+                        "type": "model_info",
+                        "requested_model": requested_model,
+                        "actual_model": current_model,
+                        "message": f"Using '{current_model}' model. To switch models, stop and restart capture.",
+                        "timestamp": int(time.time() * 1000)
                     })
-                    return
+
+                # Record the actual model being used (not the requested one)
+                session_info["config"]["model_size"] = current_model
 
             logger.info(
                 f"[Realtime {session_id[:8]}] Config updated: {session_info['config']}"
@@ -315,6 +332,22 @@ async def handle_text_message(
                 "stats": stats
             })
 
+        # ───────────────────────────────────────────────────────────────────
+        # GET_MODEL_INFO - Query actual model being used (for debugging)
+        # ───────────────────────────────────────────────────────────────────
+        elif message_type == 'get_model_info':
+            transcription_service = get_realtime_service()
+            await websocket.send_json({
+                "type": "model_info",
+                "model_size": transcription_service.model_size,
+                "device": transcription_service.device,
+                "compute_type": transcription_service.compute_type,
+                "config_model_size": session_info["config"]["model_size"],  # What config thinks
+                "is_switching": transcription_service._is_switching,
+                "timestamp": int(time.time() * 1000)
+            })
+            logger.info(f"[Realtime {session_id[:8]}] 🎯 Model info requested: actual='{transcription_service.model_size}', config='{session_info['config']['model_size']}'")
+
         else:
             logger.debug(f"[Realtime {session_id[:8]}] Unknown message type: {message_type}")
 
@@ -338,6 +371,8 @@ async def transcription_loop(
     """
     Background task that periodically transcribes audio buffer.
     Runs independently from audio ingestion.
+
+    CRASH RECOVERY: Inner try/except allows loop to continue after individual errors.
     """
     try:
         logger.info(f"[Realtime {session_id[:8]}] ═══ TRANSCRIPTION LOOP STARTING ═══")
@@ -346,11 +381,12 @@ async def transcription_loop(
     except Exception as e:
         logger.error(f"[Realtime {session_id[:8]}] ERROR IN LOOP INIT: {e}", exc_info=True)
 
-    try:
-        last_transcription_time = time.time()
-        max_chunk_duration = 2.0  # Maximum seconds before forcing transcription (reduced from 10s for faster captions)
+    last_transcription_time = time.time()
+    max_chunk_duration = 2.0  # Maximum seconds before forcing transcription (reduced from 10s for faster captions)
+    consecutive_errors = 0  # Track consecutive errors for exponential backoff
 
-        while True:
+    while True:
+        try:
             # Check very frequently for speech end (ultra-responsive)
             await asyncio.sleep(0.1)  # Check every 100ms
 
@@ -385,12 +421,22 @@ async def transcription_loop(
 
             # Transcribe
             language = session_info["config"]["language"]
+
+            # Get ACTUAL model info from service (not config - this is the REAL model)
+            actual_model_size = transcription_service.model_size
+            actual_device = transcription_service.device
+
+            logger.info(f"[Realtime {session_id[:8]}] 🎯 TRANSCRIBING with model='{actual_model_size}' on device='{actual_device}'")
+
             segments = await transcription_service.transcribe_chunk(audio, language=language)
 
             # Update last transcription time
             last_transcription_time = time.time()
 
-            # Send results
+            # Reset error counter on success
+            consecutive_errors = 0
+
+            # Send results WITH MODEL INFO for debugging
             for segment in segments:
                 try:
                     await websocket.send_json({
@@ -400,13 +446,18 @@ async def transcription_loop(
                         "start": segment.start,
                         "end": segment.end,
                         "is_final": segment.is_final,
-                        "timestamp": int(time.time() * 1000)
+                        "timestamp": int(time.time() * 1000),
+                        # 🎯 DEBUG: Include actual model info in every caption
+                        "model_info": {
+                            "model_size": actual_model_size,
+                            "device": actual_device,
+                        }
                     })
 
                     session_info["stats"]["transcriptions_sent"] += 1
 
                     logger.info(
-                        f"[Realtime {session_id[:8]}] Caption sent: \"{segment.text}\" ({segment.language})"
+                        f"[Realtime {session_id[:8]}] Caption sent: \"{segment.text}\" ({segment.language}) [model={actual_model_size}]"
                     )
 
                     # Optional: Translation with NLLB-200
@@ -447,10 +498,39 @@ async def transcription_loop(
             audio_buffer.mark_transcribed(len(audio))
             audio_buffer.reset_speech_state()
 
-    except asyncio.CancelledError:
-        logger.info(f"[Realtime {session_id[:8]}] Transcription loop cancelled")
-    except Exception as e:
-        logger.error(f"[Realtime {session_id[:8]}] Transcription loop error: {e}", exc_info=True)
+        except asyncio.CancelledError:
+            logger.info(f"[Realtime {session_id[:8]}] Transcription loop cancelled")
+            break  # Exit cleanly on cancellation
+
+        except Exception as e:
+            # CRASH RECOVERY: Log error and continue loop instead of terminating
+            consecutive_errors += 1
+            logger.error(
+                f"[Realtime {session_id[:8]}] Transcription iteration error #{consecutive_errors}: {e}",
+                exc_info=True
+            )
+
+            # Exponential backoff: wait longer after repeated failures
+            backoff_time = min(1.0 * (2 ** consecutive_errors), 10.0)  # Max 10 seconds
+            logger.warning(f"[Realtime {session_id[:8]}] Backing off for {backoff_time:.1f}s before retry...")
+            await asyncio.sleep(backoff_time)
+
+            # After 5 consecutive errors, try to clear CUDA cache (might help with memory issues)
+            if consecutive_errors == 5:
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        logger.info(f"[Realtime {session_id[:8]}] Cleared CUDA cache after 5 consecutive errors")
+                except Exception:
+                    pass
+
+            # After 10 consecutive errors, give up (something is seriously wrong)
+            if consecutive_errors >= 10:
+                logger.error(f"[Realtime {session_id[:8]}] Too many consecutive errors ({consecutive_errors}), stopping loop")
+                break
+
+            # Continue the loop - don't crash!
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -21,7 +21,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.api.routes import system
-from app.api.routes import transcribe, session, websocket, translate_text, realtime
+from app.api.routes import transcribe, session, websocket, translate_text, realtime, models
 from app.services.session_service import session_service
 from app.config import settings
 from app.logging_config import setup_logging, get_logger, set_request_id, clear_request_id
@@ -142,6 +142,52 @@ async def lifespan(app: FastAPI):
 
     total_warmup = time.time() - total_warmup_start
     logger.info(f"🔥 Model warm-up complete in {total_warmup:.2f}s - Ready for blazing fast inference!")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # DOWNLOAD ALL WHISPER MODELS - Ensures instant model switching
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("📥 Checking Whisper models and downloading if needed...")
+
+    try:
+        from huggingface_hub import snapshot_download
+        from app.api.routes.models import WHISPER_MODELS, is_model_downloaded
+
+        models_to_download = []
+        for model_name, model_data in WHISPER_MODELS.items():
+            if not is_model_downloaded(model_data["repo_id"]):
+                models_to_download.append((model_name, model_data))
+            else:
+                logger.info(f"  ✓ {model_name} already downloaded")
+
+        if models_to_download:
+            logger.info(f"📥 Downloading {len(models_to_download)} Whisper model(s)...")
+            total_size_mb = sum(m[1]["size_mb"] for m in models_to_download)
+            logger.info(f"   Total download size: ~{total_size_mb}MB")
+
+            for model_name, model_data in models_to_download:
+                try:
+                    logger.info(f"  → Downloading {model_name} ({model_data['size_mb']}MB)...")
+                    download_start = time.time()
+
+                    # Download model (will use cache if partially downloaded)
+                    await asyncio.to_thread(
+                        snapshot_download,
+                        repo_id=model_data["repo_id"],
+                        resume_download=True
+                    )
+
+                    download_time = time.time() - download_start
+                    speed_mbps = model_data['size_mb'] / download_time if download_time > 0 else 0
+                    logger.info(f"  ✓ {model_name} downloaded in {download_time:.1f}s ({speed_mbps:.1f} MB/s)")
+
+                except Exception as e:
+                    logger.warning(f"  ⚠ Failed to download {model_name}: {e}")
+                    logger.warning(f"    Model can be downloaded later via Settings → Model Management")
+        else:
+            logger.info("  ✓ All Whisper models already downloaded!")
+
+    except Exception as e:
+        logger.warning(f"⚠ Model download check failed: {e}. Models can be downloaded via Settings.")
 
     # Start background cleanup task
     cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
@@ -297,6 +343,7 @@ app.include_router(translate_text.router)
 app.include_router(system.router)
 app.include_router(capabilities.router)
 app.include_router(stream_upload.router)
+app.include_router(models.router)  # Model management
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ROOT & HEALTH ENDPOINTS
