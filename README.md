@@ -8,7 +8,7 @@ Enterprise-grade speech recognition platform implementing GPU-accelerated transc
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.3-blue.svg)](https://reactjs.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://tauri.app/)
-[![Release](https://img.shields.io/badge/release-v1.0.1-brightgreen.svg)](https://github.com/zhadyz/ai-transcription-app/releases/tag/v1.0.1)
+[![Release](https://img.shields.io/badge/release-v1.0.36-brightgreen.svg)](https://github.com/zhadyz/ai-transcription-app/releases/tag/v1.0.36)
 
 ---
 
@@ -16,19 +16,19 @@ Enterprise-grade speech recognition platform implementing GPU-accelerated transc
 
 **Windows Desktop Application** - Zero configuration required, automatic setup on first launch:
 
-- **[Stygian_1.0.1_x64_en-US.msi](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64_en-US.msi)** (25 MB) - Windows Installer (MSI)
-- **[Stygian_1.0.1_x64-setup.exe](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64-setup.exe)** (23 MB) - NSIS Installer
+- **[Stygian_1.0.36_x64-setup.exe](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.36/Stygian_1.0.36_x64-setup.exe)** (~350 MB) - Windows Installer
 
 **What's Included**:
 - Embedded Python 3.11 runtime (no external Python required)
 - FastAPI backend with Faster-Whisper
-- Automatic dependency installation on first launch
+- Auto-download of all Whisper models on first launch (~5.3GB)
+- Stable model switching (tiny → large-v3)
 - Live caption overlay system
 - Real-time translation support
 
-**Installation**: Download → Run installer → Launch → Wait 2-3 minutes (first time only)
+**Installation**: Download → Run installer → Launch → Models download automatically
 
-[See full release notes](https://github.com/zhadyz/ai-transcription-app/releases/tag/v1.0.1)
+[See full release notes](https://github.com/zhadyz/ai-transcription-app/releases/tag/v1.0.36)
 
 ---
 
@@ -233,8 +233,7 @@ npm run tauri build  # Production installer
 **Production Installer**:
 
 **Download Pre-Built Installers**:
-- **[Stygian_1.0.1_x64_en-US.msi](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64_en-US.msi)** (25 MB) - Windows Installer (MSI)
-- **[Stygian_1.0.1_x64-setup.exe](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.1/Stygian_1.0.1_x64-setup.exe)** (23 MB) - NSIS Installer
+- **[Stygian_1.0.36_x64-setup.exe](https://github.com/zhadyz/ai-transcription-app/releases/download/v1.0.36/Stygian_1.0.36_x64-setup.exe)** (~350 MB) - Windows Installer
 
 The installers include:
 - Embedded Python 3.11 runtime (extracted on first launch)
@@ -251,14 +250,14 @@ npm run tauri build
 **Build Artifacts**:
 ```
 live-captions-desktop/src-tauri/target/release/bundle/
-├── msi/Stygian_1.0.1_x64_en-US.msi (25 MB)
-└── nsis/Stygian_1.0.1_x64-setup.exe (23 MB)
+└── nsis/Stygian_1.0.36_x64-setup.exe (~350 MB)
 ```
 
 **Installer Characteristics**:
-- **Download Size**: 23-25 MB (compressed Python + backend)
-- **First Launch**: 2-3 minutes (dependency installation)
+- **Download Size**: ~350 MB (compressed Python + backend + dependencies)
+- **First Launch**: Models download automatically (~5.3GB)
 - **Subsequent Launches**: Instant
+- **Model Switching**: All models pre-downloaded, instant switching
 - **CUDA**: Optional (graceful degradation to CPU)
 - **System Integration**: Native Windows service
 
