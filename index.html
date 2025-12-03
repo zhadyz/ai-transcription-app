@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth bg-black">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stygian | OnyxLab AI</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Unicorn Studio Script -->
+    <script src="https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v1.4.29/dist/unicornStudio.umd.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              geist: ['Geist', 'sans-serif'],
+              'space-grotesk': ['Space Grotesk', 'sans-serif'],
+            },
+            colors: {
+              neutral: {
+                850: '#1f1f1f',
+                900: '#171717',
+                950: '#0a0a0a',
+              }
+            },
+            animation: {
+              'spin-slow': 'spin 4s linear infinite',
+              'marquee': 'marquee 40s linear infinite',
+              'pulse-glow': 'pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              marquee: {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(-50%)' },
+              },
+              'pulse-glow': {
+                '0%, 100%': { opacity: '1', boxShadow: '0 0 8px rgba(59,130,246,0.5)' },
+                '50%': { opacity: '.5', boxShadow: '0 0 0px rgba(59,130,246,0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom Beam Animation */
+      @property --angle {
+        syntax: '<angle>';
+        initial-value: 0deg;
+        inherits: false;
+      }
+      
+      .beam-border {
+        position: absolute;
+        inset: 0;
+        border-radius: 9999px;
+        pointer-events: none;
+        overflow: hidden;
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask-composite: exclude;
+        -webkit-mask-composite: xor;
+        padding: 1px;
+      }
+      
+      .beam-border::before {
+        content: "";
+        position: absolute;
+        inset: -50%;
+        background: conic-gradient(from var(--angle), transparent 0deg, transparent 340deg, white 360deg);
+        animation: spin-beam 4s linear infinite;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      
+      .group:hover .beam-border::before {
+        opacity: 1;
+      }
+
+      @keyframes spin-beam {
+        from { --angle: 0deg; transform: rotate(0deg); }
+        to { --angle: 360deg; transform: rotate(360deg); }
+      }
+
+      /* Manual implementation of the beam for wider browser support if @property fails or simple CSS is preferred */
+      .beam-border-simple {
+          position: absolute; inset: 0; border-radius: 9999px; pointer-events: none; overflow: hidden;
+      }
+      .beam-border-simple::before {
+          content: ""; position: absolute; inset: -2px;
+          background: conic-gradient(from 0deg, transparent 0 340deg, white 360deg);
+          animation: spin 4s linear infinite; opacity: 0; transition: opacity 0.3s ease;
+      }
+      .group:hover .beam-border-simple::before { opacity: 1; }
+
+      .reveal-word { transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+      
+      /* Grid Overlay */
+      .grid-line-v { width: 1px; height: 100%; background: rgba(255,255,255,0.03); }
+    </style>
+
+<link rel="stylesheet" href="/index.css">
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/assets/index-DELLLr6C.js"></script>
+</head>
+  <body class="antialiased text-slate-400 bg-black overflow-x-hidden selection:bg-white/10 selection:text-white">
+    <div id="root"></div>
+</body>
+</html>
